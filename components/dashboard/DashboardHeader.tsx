@@ -35,7 +35,29 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   totalExpense,
   totalProfit,
 }) => {
-  const isProfit = totalProfit >= 0;
+  // --- LOGIKA KONDISI BARU ---
+  const isNeutral = totalProfit === 0;
+  const isProfit = totalProfit > 0;
+
+  // Menentukan warna teks berdasarkan status
+  const getStatusColor = () => {
+    if (isNeutral) return '#FFFF00'; // Kuning untuk netral
+    return isProfit ? '#A5FFB0' : '#FFB3B3'; // Hijau jika untung, merah jika rugi
+  };
+
+  // Menentukan pesan teks
+  const getStatusMessage = () => {
+    if (isNeutral) return 'masih kosong nih, yuk jualan!';
+    return isProfit ? 'wah lagi untung nih!' : 'belum balik modal nih!';
+  };
+
+  // Menentukan gambar
+  const getStatusImage = () => {
+    if (isNeutral) return require('../../assets/images/dashboard/netral.png');
+    return isProfit 
+      ? require('../../assets/images/dashboard/good.png') 
+      : require('../../assets/images/dashboard/sad.png');
+  };
 
   const handleLogout = async () => {
     try {
@@ -83,7 +105,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <Text
             style={[
               styles.profitValue,
-              { color: isProfit ? '#A5FFB0' : '#FFB3B3' },
+              { color: getStatusColor() },
             ]}
           >
             {DashboardService.formatCurrency(totalProfit)}
@@ -92,59 +114,49 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <Text
             style={[
               styles.profitMessage,
-              { color: isProfit ? '#A5FFB0' : '#FFB3B3' },
+              { color: getStatusColor() },
             ]}
           >
-            {isProfit
-              ? 'wah lagi untung nih!'
-              : 'belum balik modal nih!'}
+            {getStatusMessage()}
           </Text>
         </View>
 
-        {/* IMAGE (BEBAS KELUAR WRAPPER) */}
+        {/* IMAGE */}
         <View style={styles.profitImageWrapper}>
           <Image
-            source={
-              isProfit
-                ? require('../../assets/images/dashboard/good.png')
-                : require('../../assets/images/dashboard/sad.png')
-            }
+            source={getStatusImage()}
             style={styles.profitImage}
             resizeMode="contain"
           />
         </View>
       </Animated.View>
 
-      {/* BOTTOM STATS (COMPACT HORIZONTAL) */}
-<View style={styles.bottomStats}>
-  <View style={styles.bottomCardCompact}>
-    <View style={styles.iconBoxGreen}>
-      <TrendingUp size={16} color={COLORS.secondary} />
-    </View>
+      {/* BOTTOM STATS */}
+      <View style={styles.bottomStats}>
+        <View style={styles.bottomCardCompact}>
+          <View style={styles.iconBoxGreen}>
+            <TrendingUp size={16} color={COLORS.secondary} />
+          </View>
+          <View style={styles.bottomTextWrap}>
+            <Text style={styles.bottomLabel}>Pendapatan</Text>
+            <Text style={styles.bottomValue}>
+              {DashboardService.formatCurrency(totalRevenue)}
+            </Text>
+          </View>
+        </View>
 
-    <View style={styles.bottomTextWrap}>
-      <Text style={styles.bottomLabel}>Pendapatan</Text>
-      <Text style={styles.bottomValue}>
-        {DashboardService.formatCurrency(totalRevenue)}
-      </Text>
-    </View>
-  </View>
-
-  <View style={styles.bottomCardCompact}>
-    <View style={styles.iconBoxRed}>
-      <TrendingDown size={16} color="#E74C3C" />
-    </View>
-
-    <View style={styles.bottomTextWrap}>
-      <Text style={styles.bottomLabel}>Pengeluaran</Text>
-      <Text style={styles.bottomValue}>
-        {DashboardService.formatCurrency(totalExpense)}
-      </Text>
-    </View>
-  </View>
-</View>
-
-
+        <View style={styles.bottomCardCompact}>
+          <View style={styles.iconBoxRed}>
+            <TrendingDown size={16} color="#E74C3C" />
+          </View>
+          <View style={styles.bottomTextWrap}>
+            <Text style={styles.bottomLabel}>Pengeluaran</Text>
+            <Text style={styles.bottomValue}>
+              {DashboardService.formatCurrency(totalExpense)}
+            </Text>
+          </View>
+        </View>
+      </View>
     </Animated.View>
   );
 };
