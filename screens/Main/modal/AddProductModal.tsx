@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -25,12 +25,38 @@ const MAX_MODAL_HEIGHT = height * 0.85;
 interface AddProductModalProps {
   visible: boolean;
   onClose: () => void;
+  onSuccess?: () => void | Promise<void>; // ✅ OPTIONAL
 }
 
-const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) => {
+
+const AddProductModal: React.FC<AddProductModalProps> = ({
+  visible,
+  onClose,
+  onSuccess,
+}) => {
   const slideAnim = useRef(new Animated.Value(height)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
+  /* =============================
+     HANDLE CLOSE (STABLE)
+  ============================== */
+const handleClose = useCallback(() => {
+  Animated.timing(slideAnim, {
+    toValue: height,
+    duration: 250,
+    useNativeDriver: true,
+  }).start(async () => {
+    if (onSuccess) {
+      await onSuccess(); // aman, dicek dulu
+    }
+    onClose();
+  });
+}, [onClose, onSuccess, slideAnim]);
+
+
+  /* =============================
+     PRODUCT FORM HOOK
+  ============================== */
   const {
     formData,
     loading,
@@ -42,6 +68,9 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
     setShowScanner,
   } = useProductForm(handleClose);
 
+  /* =============================
+     OPEN / CLOSE ANIMATION
+  ============================== */
   useEffect(() => {
     if (visible) {
       Animated.spring(slideAnim, {
@@ -51,86 +80,78 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
         stiffness: 90,
       }).start();
     } else {
-      Animated.timing(slideAnim, {
-        toValue: height,
-        duration: 250,
-        useNativeDriver: true,
-      }).start();
+      slideAnim.setValue(height);
     }
-  }, [visible]);
+  }, [visible, slideAnim]);
 
-  function handleClose() {
-    Animated.timing(slideAnim, {
-      toValue: height,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(onClose);
-  }
-
+  /* =============================
+     SCROLL TO INPUT
+  ============================== */
   const handleFieldFocus = (fieldY: number) => {
-    if (scrollViewRef.current) {
-      scrollViewRef.current.scrollTo({ 
-        y: fieldY - 60, 
-        animated: true 
-      });
-    }
+    scrollViewRef.current?.scrollTo({
+      y: fieldY - 60,
+      animated: true,
+    });
   };
 
   return (
     <Modal transparent visible={visible} animationType="none">
-      <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
+      <StatusBar
+        translucent
+        backgroundColor="transparent"
+        barStyle="light-content"
+      />
 
       <View style={styles.overlay}>
+        {/* BACKDROP */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
+        {/* MODAL */}
         <Animated.View
           style={[
             styles.modalContainer,
-            { 
-              maxHeight: MAX_MODAL_HEIGHT, 
-              transform: [{ translateY: slideAnim }] 
+            {
+              maxHeight: MAX_MODAL_HEIGHT,
+              transform: [{ translateY: slideAnim }],
             },
           ]}
         >
-          {/* HEADER MODAL */}
+          {/* HEADER */}
           <ProductFormHeader onClose={handleClose} isModal />
 
           <View style={styles.contentWrapper}>
             <KeyboardAvoidingView
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
               keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-              style={styles.keyboardView}
             >
               <ScrollView
                 ref={scrollViewRef}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
-                bounces={true}
               >
                 <ProductFormFields
-                  name={formData.name}
-                  price={formData.price}
-                  purchasePrice={formData.purchasePrice}
-                  supplier={formData.supplier}
-                  category={formData.category}
-                  stock={formData.stock}
-                  barcode={formData.barcode}
-                  onChangeName={(t) => updateField('name', t)}
-                  onChangePrice={(t) => updateField('price', t)}
-                  onChangePurchasePrice={(t) => updateField('purchasePrice', t)}
-                  onChangeSupplier={(t) => updateField('supplier', t)}
-                  onChangeCategory={(t) => updateField('category', t)}
-                  onChangeStock={(t) => updateField('stock', t)}
-                  onChangeBarcode={(t) => updateField('barcode', t)}
+                  {...formData}
+                  onChangeName={(v) => updateField('name', v)}
+                  onChangePrice={(v) => updateField('price', v)}
+                  onChangePurchasePrice={(v) =>
+                    updateField('purchasePrice', v)
+                  }
+                  onChangeSupplier={(v) => updateField('supplier', v)}
+                  onChangeCategory={(v) => updateField('category', v)}
+                  onChangeStock={(v) => updateField('stock', v)}
+                  onChangeBarcode={(v) => updateField('barcode', v)}
                   onScanPress={() => setShowScanner(true)}
                   onAutoGeneratePress={generateBarcode}
                   onFieldFocus={handleFieldFocus}
                 />
 
-                <SubmitButton loading={loading} onPress={handleSubmit} />
+                <SubmitButton
+                  loading={loading}
+                  onPress={handleSubmit}
+                />
 
                 <Text style={styles.infoFooter}>
                   Pastikan kategori, harga beli, dan pemasok diisi agar laporan laba akurat.
@@ -139,11 +160,14 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
             </KeyboardAvoidingView>
           </View>
 
-          <BarcodeScannerScreen
-            visible={showScanner}
-            onClose={() => setShowScanner(false)}
-            onScan={handleBarcodeScanned}
-          />
+          {/* BARCODE SCANNER */}
+          {showScanner && (
+            <BarcodeScannerScreen
+              visible={showScanner}
+              onClose={() => setShowScanner(false)}
+              onScan={handleBarcodeScanned}
+            />
+          )}
         </Animated.View>
       </View>
     </Modal>
@@ -151,29 +175,25 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
 };
 
 const styles = StyleSheet.create({
-  overlay: { 
-    flex: 1, 
-    justifyContent: 'flex-end' 
+  overlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  backdrop: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.5)' 
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContainer: {
     backgroundColor: COLORS.primary,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     overflow: 'hidden',
-    // Tidak menggunakan height: MODAL_HEIGHT agar auto-height mengikuti isi
   },
   contentWrapper: {
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -16, // Overlay di atas header gradient sedikit
-  },
-  keyboardView: {
-    // Membatasi keyboard avoiding view agar tidak memaksa tinggi ke flex 1
+    marginTop: -16,
   },
   scrollContent: {
     paddingHorizontal: 20,

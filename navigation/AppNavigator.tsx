@@ -1,54 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-
-// Screens
-import LoginScreen from '../screens/Auth/LoginScreen';
-import RegisterScreen from '../screens/Auth/RegisterScreen';
-import AdminDashboard from '../screens/Main/AdminDashboard';
-import CashierDashboard from '../screens/Main/CashierDashboard';
-
-import CashierScreen from '../screens/Main/CashierScreen';
-import ProductScreen from '../screens/Main/ProductScreen';
-import TransactionScreen from '../screens/Main/TransactionScreen';
-
-// Firebase
-import { auth } from '../services/firebaseConfig';
 import { onAuthStateChanged, User } from 'firebase/auth';
 
-// --- KONSTANTA WARNA ---
-const COLORS = {
-  primary: '#1C3A5A',
-  secondary: '#00A79D',
-  accent: '#F58220',
-  background: '#F5F5F5',
-  cardBg: '#FFFFFF',
-  textDark: '#444444',
-  textLight: '#7f8c8d',
-};
+import { auth } from '../services/firebaseConfig';
+import LoginScreen from '../screens/Auth/LoginScreen';
+import RegisterScreen from '../screens/Auth/RegisterScreen';
+import CashierDashboard from '../screens/Main/CashierDashboard';
+import CashierScreen from '../screens/Main/CashierScreen';
 
-export type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  AdminDashboard: undefined;
-  CashierDashboard: undefined;
-  Cashier: undefined;
-  Product: undefined;
-  Transaction: undefined;
-};
+import AdminTabsLayout from './AdminTabsLayout'; // ← Import AdminTabsLayout
+import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
-
-const getUserRole = async (user: User): Promise<string> => {
-  try {
-    const token = await user.getIdTokenResult();
-    return (token.claims.role as string) || 'kasir';
-  } catch (error) {
-    console.error('Gagal ambil role:', error);
-    return 'kasir';
-  }
-};
 
 const AppNavigator = () => {
   const [user, setUser] = useState<User | null>(null);
@@ -56,11 +21,11 @@ const AppNavigator = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        const token = await currentUser.getIdTokenResult();
+        setRole((token.claims.role as 'admin' | 'kasir') ?? 'kasir');
         setUser(currentUser);
-        const userRole = await getUserRole(currentUser);
-        setRole(userRole as 'admin' | 'kasir');
       } else {
         setUser(null);
         setRole(null);
@@ -68,48 +33,31 @@ const AppNavigator = () => {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return unsub;
   }, []);
 
   if (loading) {
     return (
       <View style={styles.loading}>
-        <ActivityIndicator size="large" color={COLORS.secondary} />
+        <ActivityIndicator size="large" />
       </View>
     );
   }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator
-        // ✅ HEADER DINONAKTIFKAN SECARA GLOBAL DISINI
-        screenOptions={{
-          headerShown: false, 
-          contentStyle: { backgroundColor: COLORS.background }
-        }}
-      >
-        {user ? (
-          <>
-            {role === 'admin' ? (
-              <Stack.Screen
-                name="AdminDashboard"
-                component={AdminDashboard}
-              />
-            ) : (
-              <Stack.Screen
-                name="CashierDashboard"
-                component={CashierDashboard}
-              />
-            )}
-
-            <Stack.Screen name="Cashier" component={CashierScreen} />
-            <Stack.Screen name="Product" component={ProductScreen} />
-            <Stack.Screen name="Transaction" component={TransactionScreen} />
-          </>
-        ) : (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {!user ? (
           <>
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
+          </>
+        ) : role === 'admin' ? (
+          <Stack.Screen name="AdminTabs" component={AdminTabsLayout} />
+        ) : (
+          <>
+            <Stack.Screen name="CashierDashboard" component={CashierDashboard} />
+            <Stack.Screen name="Cashier" component={CashierScreen} />
           </>
         )}
       </Stack.Navigator>
@@ -122,7 +70,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.background,
   },
 });
 

@@ -1,12 +1,14 @@
-// navigation/types.ts
 export type RootStackParamList = {
-  Login: undefined;
-  Register: undefined;
-  MainTabs: undefined;
-  AdminDashboard: undefined;
-  CashierDashboard: undefined;
-  Cashier: undefined;
-  Product: undefined;
-  Transaction: undefined;
-  AddProduct: undefined; 
+  Login: undefined;
+  Register: undefined;
+  AdminTabs: undefined;
+  CashierDashboard: undefined;
+  Cashier: undefined;
+};
+
+export type AdminTabParamList = {
+  AdminDashboard: undefined;
+  Product: undefined;
+  Transaction: undefined;
+  Profile: undefined;
 };

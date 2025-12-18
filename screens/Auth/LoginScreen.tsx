@@ -15,14 +15,9 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 
-import { Mail, Lock } from 'lucide-react-native'; // Tambahkan icon agar selaras
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
+import { Mail, Lock } from 'lucide-react-native';
 import { loginUser } from '../../services/authService';
 import FloatingLabelInput from '../../components/FloatingLabelInput';
-
-type LoginNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 const { height } = Dimensions.get('window');
 
@@ -43,26 +38,33 @@ const LoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
-  const navigation = useNavigation<LoginNavigationProp>();
-
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
-      Animated.spring(scaleAnim, { toValue: 1, friction: 7, tension: 40, useNativeDriver: true }),
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        friction: 7,
+        tension: 40,
+        useNativeDriver: true,
+      }),
     ]).start();
 
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const keyboardDidShowListener = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const keyboardDidHideListener = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
 
     return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
@@ -74,13 +76,14 @@ const LoginScreen = () => {
 
     setIsLoading(true);
     try {
-      const { role } = await loginUser(email.trim(), password);
-      if (role === 'admin') {
-        navigation.replace('AdminDashboard');
-      } else {
-        navigation.replace('CashierDashboard');
-      }
-    } catch (error: any) {
+      await loginUser(email.trim(), password);
+
+      /**
+       * 🚫 JANGAN navigate di sini
+       * AppNavigator akan otomatis
+       * mengarahkan user berdasarkan role
+       */
+    } catch (error) {
       Alert.alert('Login Gagal', 'Email atau Password salah.');
     } finally {
       setIsLoading(false);
@@ -88,26 +91,30 @@ const LoginScreen = () => {
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'} 
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView 
+      <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={[
-          styles.card, 
-          { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }
-        ]}>
-          <Image 
-            source={require('../../assets/iconmain.png')} // Diselaraskan dengan aset Register
+        <Animated.View
+          style={[
+            styles.card,
+            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+          ]}
+        >
+          <Image
+            source={require('../../assets/iconmain.png')}
             style={styles.logo}
             resizeMode="contain"
           />
-          
+
           <Text style={styles.title}>Selamat Datang</Text>
-          <Text style={styles.subtitle}>Silakan masuk untuk melanjutkan transaksi kasir Anda.</Text>
+          <Text style={styles.subtitle}>
+            Silakan masuk untuk melanjutkan transaksi kasir Anda.
+          </Text>
 
           <FloatingLabelInput
             label="Email"
@@ -115,7 +122,7 @@ const LoginScreen = () => {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
-            icon={<Mail size={20} color="#7f8c8d" />} // Ditambahkan icon
+            icon={<Mail size={20} color={COLORS.textLight} />}
           />
 
           <FloatingLabelInput
@@ -124,14 +131,17 @@ const LoginScreen = () => {
             onChangeText={setPassword}
             secureTextEntry
             isPassword
-            icon={<Lock size={20} color="#7f8c8d" />} // Ditambahkan icon
+            icon={<Lock size={20} color={COLORS.textLight} />}
           />
 
           <TouchableOpacity
             onPress={handleLogin}
             disabled={isLoading}
             activeOpacity={0.8}
-            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+            style={[
+              styles.loginButton,
+              isLoading && styles.loginButtonDisabled,
+            ]}
           >
             {isLoading ? (
               <ActivityIndicator color="#FFFFFF" />
@@ -140,24 +150,22 @@ const LoginScreen = () => {
             )}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.registerLink}
-            onPress={() => navigation.navigate('Register')}
-            disabled={isLoading}
-          >
-            <Text style={styles.registerText}>
-              Belum punya akun? <Text style={styles.registerTextHighlight}>Daftar di sini</Text>
+          {!isKeyboardVisible && (
+            <Text style={styles.footerText}>
+              Swiftstock by Efendi • © 2025
             </Text>
-          </TouchableOpacity>
+          )}
         </Animated.View>
-        
-        {!isKeyboardVisible && (
-          <Text style={styles.footerText}>Swiftstock by Efendi | © 2025</Text>
-        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
+
+export default LoginScreen;
+
+/* ===========================
+   STYLES
+=========================== */
 
 const styles = StyleSheet.create({
   container: {
@@ -184,12 +192,14 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 12,
       },
-      android: { elevation: 8 },
+      android: {
+        elevation: 8,
+      },
     }),
   },
   logo: {
     width: '100%',
-    height: 60, // Sesuaikan kembali jika login.png berbeda ukuran dengan iconmain.png
+    height: 60,
     alignSelf: 'center',
     marginBottom: 10,
   },
@@ -198,14 +208,13 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginBottom: 8,
     textAlign: 'center',
-    fontFamily: 'MontserratBold',
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: 14,
     color: COLORS.textLight,
     marginBottom: 25,
     textAlign: 'center',
-    fontFamily: 'PoppinsRegular',
     lineHeight: 20,
   },
   loginButton: {
@@ -222,7 +231,9 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 8,
       },
-      android: { elevation: 5 },
+      android: {
+        elevation: 5,
+      },
     }),
   },
   loginButtonDisabled: {
@@ -231,28 +242,12 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontFamily: 'PoppinsSemiBold',
-  },
-  registerLink: {
-    marginTop: 25,
-    alignItems: 'center',
-  },
-  registerText: {
-    color: COLORS.textLight,
-    fontSize: 15,
-    fontFamily: 'PoppinsRegular',
-  },
-  registerTextHighlight: {
-    color: COLORS.primary,
-    fontFamily: 'PoppinsSemiBold',
+    fontWeight: '600',
   },
   footerText: {
     marginTop: 30,
     fontSize: 12,
     color: COLORS.textLight,
-    fontFamily: 'PoppinsRegular',
     textAlign: 'center',
   },
 });
-
-export default LoginScreen;

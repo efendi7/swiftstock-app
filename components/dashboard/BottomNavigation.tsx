@@ -1,88 +1,78 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import {
-  LayoutDashboard, // Icon Dashboard
-  Package,         // Icon List Produk
+  LayoutDashboard,
+  Package,
   BarChart2,
   User,
   PlusCircle,
 } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
 
-interface BottomNavigationProps {
-  onDashboardPress: () => void; // Ubah nama prop agar relevan
-  onProductListPress: () => void; // Ubah nama prop agar relevan
-  onReportPress: () => void;
+interface Props extends BottomTabBarProps {
   onFabPress: () => void;
-  bottomInset: number;
 }
 
-export const BottomNavigation: React.FC<BottomNavigationProps> = ({
-  onDashboardPress,
-  onProductListPress,
-  onReportPress,
+export const BottomNavigation: React.FC<Props> = ({
+  state,
+  navigation,
   onFabPress,
-  bottomInset,
+  insets,
 }) => {
+  const currentRoute = state.routes[state.index].name;
+
+  const isActive = (routeName: string) => currentRoute === routeName;
+
   return (
-    <View style={[styles.footerWrapper, { paddingBottom: bottomInset }]}>
+    <View style={[styles.footerWrapper, { paddingBottom: insets.bottom }]}>
       <View style={styles.navContainer}>
-        
-        {/* MENU 1: DASHBOARD (PALING KIRI) */}
+
         <TouchableOpacity
           style={styles.navItem}
-          onPress={onDashboardPress}
-          accessibilityLabel="Dashboard"
-          accessibilityRole="button"
+          onPress={() => navigation.navigate('AdminDashboard')}
         >
-          <LayoutDashboard size={24} color={COLORS.textLight} />
+          <LayoutDashboard
+            size={24}
+            color={isActive('AdminDashboard') ? COLORS.secondary : COLORS.textLight}
+          />
           <Text style={styles.navLabel}>Dashboard</Text>
         </TouchableOpacity>
 
-        {/* MENU 2: LIST PRODUK */}
         <TouchableOpacity
           style={styles.navItem}
-          onPress={onProductListPress}
-          accessibilityLabel="Produk"
-          accessibilityRole="button"
+          onPress={() => navigation.navigate('Product')}
         >
-          <Package size={24} color={COLORS.textLight} />
+          <Package
+            size={24}
+            color={isActive('Product') ? COLORS.secondary : COLORS.textLight}
+          />
           <Text style={styles.navLabel}>Produk</Text>
         </TouchableOpacity>
 
-        {/* Space untuk FAB agar icon navigasi tidak tertutup */}
         <View style={{ width: 75 }} />
 
-        {/* MENU 3: LAPORAN */}
         <TouchableOpacity
           style={styles.navItem}
-          onPress={onReportPress}
-          accessibilityLabel="Laporan"
-          accessibilityRole="button"
+          onPress={() => navigation.navigate('Transaction')}
         >
-          <BarChart2 size={24} color={COLORS.textLight} />
+          <BarChart2
+            size={24}
+            color={isActive('Transaction') ? COLORS.secondary : COLORS.textLight}
+          />
           <Text style={styles.navLabel}>Laporan</Text>
         </TouchableOpacity>
 
-        {/* MENU 4: PROFIL */}
-        <TouchableOpacity
-          style={styles.navItem}
-          accessibilityLabel="Profil"
-          accessibilityRole="button"
-        >
+        <TouchableOpacity style={styles.navItem}>
           <User size={24} color={COLORS.textLight} />
           <Text style={styles.navLabel}>Profil</Text>
         </TouchableOpacity>
       </View>
 
-      {/* FAB Button (Tambah Produk) */}
       <TouchableOpacity
-        style={[styles.fabButton, { bottom: 25 + bottomInset }]}
-        activeOpacity={0.9}
+        style={[styles.fabButton, { bottom: 25 + insets.bottom }]}
         onPress={onFabPress}
-        accessibilityLabel="Tambah Produk"
-        accessibilityRole="button"
       >
         <LinearGradient
           colors={[COLORS.secondary, '#008e85']}
@@ -104,11 +94,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
-    elevation: 25,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -5 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
   },
   navContainer: {
     height: 70,
@@ -116,31 +101,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'center',
   },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navLabel: {
-    fontSize: 10,
-    color: COLORS.textLight,
-    marginTop: 4,
-    fontFamily: 'PoppinsMedium', // Terapkan font Poppins
-  },
+  navItem: { alignItems: 'center', flex: 1 },
+  navLabel: { fontSize: 10, marginTop: 4 },
   fabButton: {
     position: 'absolute',
     alignSelf: 'center',
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: COLORS.background, // Biasanya warna putih atau background app
     padding: 6,
-    zIndex: 100,
   },
   fabGradient: {
     flex: 1,
     borderRadius: 30,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 5,
   },
 });
