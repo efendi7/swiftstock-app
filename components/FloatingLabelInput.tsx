@@ -1,5 +1,3 @@
-// components/FloatingLabelInput.tsx - VERSI FIX ERROR ANIMATED LEFT
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
@@ -11,8 +9,8 @@ import {
   Platform,
   Easing,
   TouchableOpacity,
+  LayoutChangeEvent,
 } from 'react-native';
-
 import { Eye, EyeOff } from 'lucide-react-native';
 
 const COLORS = {
@@ -31,6 +29,7 @@ interface FloatingLabelInputProps extends TextInputProps {
   isPassword?: boolean;
   inputStyle?: object;
   labelStyle?: object;
+  onFocusCallback?: (y: number) => void;
 }
 
 const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
@@ -41,10 +40,12 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
   isPassword,
   inputStyle,
   labelStyle,
+  onFocusCallback,
   ...rest
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [secure, setSecure] = useState(!!isPassword);
+  const containerRef = useRef<View>(null);
 
   const floatAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
@@ -53,39 +54,48 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
       toValue: isFocused || value ? 1 : 0,
       duration: 200,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true, // Aman karena hanya pakai transform & opacity
+      useNativeDriver: true,
     }).start();
   }, [isFocused, value]);
 
   const translateY = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -34],
+    outputRange: [0, -26], 
   });
 
   const scale = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.785], // ~11px dari base 14px
+    outputRange: [1, 0.75],
   });
 
-  // Geser horizontal pakai translateX (supported native!)
   const translateX = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [icon ? 38 : 0, icon ? -8 : 0], 
-    // Awal: geser ke kanan agar tidak numpuk icon
-    // Akhir: geser sedikit ke kiri agar rata semua field
+    outputRange: [icon ? 30 : 0, icon ? -4 : 0],
   });
 
   const labelColor = isFocused ? COLORS.primary : COLORS.labelNormal;
   const borderColor = isFocused ? COLORS.primary : COLORS.borderNormal;
 
+  const handleFocus = () => {
+    setIsFocused(true);
+    if (onFocusCallback && containerRef.current) {
+      containerRef.current.measure((x, y, width, height, pageX, pageY) => {
+        onFocusCallback(pageY);
+      });
+    }
+  };
+
   return (
-    <View style={[styles.container, { borderColor }]}>
+    <View ref={containerRef} style={[styles.container, { borderColor }]}>
       <Animated.Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
         style={[
           styles.label,
           {
             transform: [{ translateY }, { translateX }, { scale }],
             color: labelColor,
+            maxWidth: '90%', 
           },
           labelStyle,
         ]}
@@ -103,8 +113,9 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
           style={[styles.input, inputStyle]}
           secureTextEntry={secure}
           cursorColor={COLORS.primary}
-          onFocus={() => setIsFocused(true)}
+          onFocus={handleFocus}
           onBlur={() => setIsFocused(false)}
+          placeholder=""
         />
 
         {isPassword && (
@@ -114,9 +125,9 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
             activeOpacity={0.7}
           >
             {secure ? (
-              <EyeOff size={20} color={isFocused ? COLORS.primary : COLORS.labelNormal} />
+              <EyeOff size={18} color={isFocused ? COLORS.primary : COLORS.labelNormal} />
             ) : (
-              <Eye size={20} color={COLORS.primary} />
+              <Eye size={18} color={COLORS.primary} />
             )}
           </TouchableOpacity>
         )}
@@ -127,48 +138,53 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    height: 60,
+    height: 50,
     borderWidth: 1.5,
     borderRadius: 12,
-    marginBottom: 20,
-    paddingHorizontal: 16,
+    marginBottom: 16,
+    paddingHorizontal: 10,
     justifyContent: 'center',
     backgroundColor: COLORS.background,
   },
   label: {
     position: 'absolute',
-    left: 16,                          // ← Fixed base position
+    left: 10,
     backgroundColor: COLORS.background,
     paddingHorizontal: 4,
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: 'PoppinsRegular',
     zIndex: 1,
-    top: 20,
+    top: 14,
+    alignSelf: 'flex-start',
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
+    marginTop: 2,
   },
   iconContainer: {
-    marginRight: 12,
+    marginRight: 6,
+    width: 20,
+    alignItems: 'center',
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 13,
     color: COLORS.text,
-    paddingVertical: 0,
     fontFamily: 'PoppinsRegular',
     ...Platform.select({
       android: {
         paddingVertical: 0,
         textAlignVertical: 'center',
       },
+      ios: {
+        paddingVertical: 6,
+      }
     }),
   },
   eyeIcon: {
-    paddingLeft: 8,
-    paddingRight: 4,
+    paddingLeft: 6,
   },
 });
 

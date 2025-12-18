@@ -1,0 +1,113 @@
+import { StyleSheet } from 'react-native';
+
+export const COLORS = {
+  primary: '#1C3A5A',
+  secondary: '#00A79D',
+  accent: '#F58220',
+  background: '#F5F5F5',
+  cardBg: '#FFFFFF',
+  textDark: '#444444',
+  textLight: '#7f8c8d',
+  success: '#4CAF50',
+  danger: '#F44336',
+};
+
+export const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background },
+  loadingText: { marginTop: 12, fontSize: 16, color: '#666' },
+
+  header: { 
+    paddingHorizontal: 25,
+    paddingBottom: 25,
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    overflow: 'hidden',
+    elevation: 5,
+  },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#FFF' },
+  subtitle: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 4 },
+
+  searchContainer: { 
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF', 
+    marginHorizontal: 20,
+    marginTop: -15,
+    marginBottom: 12,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, padding: 12, fontSize: 15, color: COLORS.textDark },
+  clearButton: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.textLight, justifyContent: 'center', alignItems: 'center' },
+
+  summaryBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+  },
+  summaryText: { fontSize: 14, color: COLORS.textLight },
+  summaryValue: { fontWeight: 'bold', color: COLORS.textDark },
+  filterToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: COLORS.background, borderRadius: 8 },
+  filterToggleText: { fontSize: 14, fontWeight: '600', color: COLORS.secondary },
+
+  filterWrapper: { backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#EEE' },
+  filterContent: { padding: 16 },
+  filterGroup: { marginBottom: 16 },
+  filterGroupLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textDark, marginBottom: 8 },
+  chipRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+
+  filterChip: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: COLORS.background, alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
+  filterChipActive: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
+  filterChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textDark },
+  filterChipTextActive: { color: '#FFF' },
+
+  sortChip: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: COLORS.background, alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
+  sortChipActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  sortChipText: { fontSize: 13, fontWeight: '600', color: COLORS.textDark },
+  sortChipTextActive: { color: '#FFF' },
+
+  monthPickerContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: COLORS.background, borderRadius: 12, marginBottom: 12 },
+  monthArrow: { padding: 12, backgroundColor: '#FFF', borderRadius: 8 },
+  arrowText: { fontSize: 18, color: COLORS.secondary, fontWeight: 'bold' },
+  monthDisplay: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  monthYearText: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
+
+  dateRangeContainer: { marginBottom: 12 },
+  dateRangeRow: { flexDirection: 'row', gap: 12 },
+  dateButton: { flex: 1, backgroundColor: COLORS.background, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#E0E0E0' },
+  dateLabel: { fontSize: 12, color: COLORS.textLight, marginBottom: 4 },
+  dateValue: { fontSize: 14, color: COLORS.textDark, fontWeight: '600' },
+
+  listContainer: { padding: 16 },
+  listContainerEmpty: { flex: 1 },
+
+  transactionCard: { backgroundColor: '#FFF', borderRadius: 14, padding: 16, marginBottom: 12, elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 3, borderLeftWidth: 4, borderLeftColor: COLORS.secondary },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  idBadge: { backgroundColor: COLORS.background, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  transactionId: { fontSize: 14, fontWeight: 'bold', color: COLORS.textDark },
+  transactionDate: { fontSize: 12, color: COLORS.textLight },
+  cashierSection: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0' },
+  cashierLabel: { fontSize: 12, color: COLORS.textLight },
+  cashierName: { fontSize: 13, color: COLORS.secondary, fontWeight: '600' },
+  cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  itemInfo: { backgroundColor: COLORS.background, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  itemCount: { fontSize: 12, color: COLORS.textDark, fontWeight: '600' },
+  transactionTotal: { fontSize: 18, fontWeight: 'bold', color: COLORS.secondary },
+
+  emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 60 },
+  emptyText: { fontSize: 16, color: '#999', textAlign: 'center' },
+  footerLoader: { paddingVertical: 20, alignItems: 'center' },
+  footerText: { marginTop: 8, fontSize: 14, color: '#666' },
+});

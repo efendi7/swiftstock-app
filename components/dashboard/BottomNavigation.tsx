@@ -2,8 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ClipboardList,
-  ArrowDownCircle,
+  LayoutDashboard, // Icon Dashboard
+  Package,         // Icon List Produk
   BarChart2,
   User,
   PlusCircle,
@@ -11,14 +11,16 @@ import {
 import { COLORS } from '../../constants/colors';
 
 interface BottomNavigationProps {
-  onInventoryPress: () => void;
+  onDashboardPress: () => void; // Ubah nama prop agar relevan
+  onProductListPress: () => void; // Ubah nama prop agar relevan
   onReportPress: () => void;
   onFabPress: () => void;
   bottomInset: number;
 }
 
 export const BottomNavigation: React.FC<BottomNavigationProps> = ({
-  onInventoryPress,
+  onDashboardPress,
+  onProductListPress,
   onReportPress,
   onFabPress,
   bottomInset,
@@ -26,28 +28,33 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   return (
     <View style={[styles.footerWrapper, { paddingBottom: bottomInset }]}>
       <View style={styles.navContainer}>
+        
+        {/* MENU 1: DASHBOARD (PALING KIRI) */}
         <TouchableOpacity
           style={styles.navItem}
-          onPress={onInventoryPress}
-          accessibilityLabel="Inventaris"
+          onPress={onDashboardPress}
+          accessibilityLabel="Dashboard"
           accessibilityRole="button"
         >
-          <ClipboardList size={24} color={COLORS.textLight} />
-          <Text style={styles.navLabel}>Inventaris</Text>
+          <LayoutDashboard size={24} color={COLORS.textLight} />
+          <Text style={styles.navLabel}>Dashboard</Text>
         </TouchableOpacity>
 
+        {/* MENU 2: LIST PRODUK */}
         <TouchableOpacity
           style={styles.navItem}
-          accessibilityLabel="Masuk"
+          onPress={onProductListPress}
+          accessibilityLabel="Produk"
           accessibilityRole="button"
         >
-          <ArrowDownCircle size={24} color={COLORS.textLight} />
-          <Text style={styles.navLabel}>Masuk</Text>
+          <Package size={24} color={COLORS.textLight} />
+          <Text style={styles.navLabel}>Produk</Text>
         </TouchableOpacity>
 
-        {/* Space untuk FAB */}
+        {/* Space untuk FAB agar icon navigasi tidak tertutup */}
         <View style={{ width: 75 }} />
 
+        {/* MENU 3: LAPORAN */}
         <TouchableOpacity
           style={styles.navItem}
           onPress={onReportPress}
@@ -58,6 +65,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
           <Text style={styles.navLabel}>Laporan</Text>
         </TouchableOpacity>
 
+        {/* MENU 4: PROFIL */}
         <TouchableOpacity
           style={styles.navItem}
           accessibilityLabel="Profil"
@@ -68,7 +76,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* FAB Button */}
+      {/* FAB Button (Tambah Produk) */}
       <TouchableOpacity
         style={[styles.fabButton, { bottom: 25 + bottomInset }]}
         activeOpacity={0.9}
@@ -116,6 +124,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: COLORS.textLight,
     marginTop: 4,
+    fontFamily: 'PoppinsMedium', // Terapkan font Poppins
   },
   fabButton: {
     position: 'absolute',
@@ -123,7 +132,7 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.background, // Biasanya warna putih atau background app
     padding: 6,
     zIndex: 100,
   },

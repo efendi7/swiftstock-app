@@ -20,7 +20,7 @@ import { SubmitButton } from '../../../components/product/SubmitButton';
 import BarcodeScannerScreen from './../BarcodeScannerScreen';
 
 const { height } = Dimensions.get('window');
-const MODAL_HEIGHT = height * 0.9; // Sedikit lebih tinggi untuk menampung field kategori
+const MAX_MODAL_HEIGHT = height * 0.85;
 
 interface AddProductModalProps {
   visible: boolean;
@@ -29,6 +29,7 @@ interface AddProductModalProps {
 
 const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) => {
   const slideAnim = useRef(new Animated.Value(height)).current;
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const {
     formData,
@@ -66,6 +67,15 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
     }).start(onClose);
   }
 
+  const handleFieldFocus = (fieldY: number) => {
+    if (scrollViewRef.current) {
+      scrollViewRef.current.scrollTo({ 
+        y: fieldY - 60, 
+        animated: true 
+      });
+    }
+  };
+
   return (
     <Modal transparent visible={visible} animationType="none">
       <StatusBar translucent backgroundColor="transparent" barStyle="light-content" />
@@ -78,38 +88,46 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
         <Animated.View
           style={[
             styles.modalContainer,
-            { height: MODAL_HEIGHT, transform: [{ translateY: slideAnim }] },
+            { 
+              maxHeight: MAX_MODAL_HEIGHT, 
+              transform: [{ translateY: slideAnim }] 
+            },
           ]}
         >
+          {/* HEADER MODAL */}
           <ProductFormHeader onClose={handleClose} isModal />
 
           <View style={styles.contentWrapper}>
             <KeyboardAvoidingView
-              style={{ flex: 1 }}
               behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
+              style={styles.keyboardView}
             >
               <ScrollView
+                ref={scrollViewRef}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
+                bounces={true}
               >
                 <ProductFormFields
                   name={formData.name}
                   price={formData.price}
                   purchasePrice={formData.purchasePrice}
                   supplier={formData.supplier}
-                  category={formData.category} // Sinkronisasi field kategori
+                  category={formData.category}
                   stock={formData.stock}
                   barcode={formData.barcode}
                   onChangeName={(t) => updateField('name', t)}
                   onChangePrice={(t) => updateField('price', t)}
                   onChangePurchasePrice={(t) => updateField('purchasePrice', t)}
                   onChangeSupplier={(t) => updateField('supplier', t)}
-                  onChangeCategory={(t) => updateField('category', t)} // Sinkronisasi handler kategori
+                  onChangeCategory={(t) => updateField('category', t)}
                   onChangeStock={(t) => updateField('stock', t)}
                   onChangeBarcode={(t) => updateField('barcode', t)}
                   onScanPress={() => setShowScanner(true)}
                   onAutoGeneratePress={generateBarcode}
+                  onFieldFocus={handleFieldFocus}
                 />
 
                 <SubmitButton loading={loading} onPress={handleSubmit} />
@@ -133,32 +151,44 @@ const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose }) =
 };
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: { 
+    flex: 1, 
+    justifyContent: 'flex-end' 
+  },
+  backdrop: { 
+    ...StyleSheet.absoluteFillObject, 
+    backgroundColor: 'rgba(0,0,0,0.5)' 
+  },
   modalContainer: {
     backgroundColor: COLORS.primary,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     overflow: 'hidden',
+    // Tidak menggunakan height: MODAL_HEIGHT agar auto-height mengikuti isi
   },
   contentWrapper: {
-    flex: 1,
     backgroundColor: COLORS.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -16,
+    marginTop: -16, // Overlay di atas header gradient sedikit
+  },
+  keyboardView: {
+    // Membatasi keyboard avoiding view agar tidak memaksa tinggi ke flex 1
   },
   scrollContent: {
     paddingHorizontal: 20,
     paddingTop: 24,
-    paddingBottom: 40,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 24,
   },
   infoFooter: {
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 11,
+    fontFamily: 'PoppinsRegular',
     color: COLORS.textLight,
-    marginTop: 20,
+    marginTop: 16,
     paddingHorizontal: 20,
+    lineHeight: 16,
+    marginBottom: 8,
   },
 });
 

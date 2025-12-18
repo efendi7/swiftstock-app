@@ -46,17 +46,17 @@ const styles = StyleSheet.create({
   saveButton: {
     borderRadius: 15,
     overflow: 'hidden',
-    marginTop: 10,
+    marginTop: 8, // Dikurangi dari 10 agar lebih rapat
   },
   saveGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 16,
+    paddingVertical: 14, // Dikurangi dari 16 agar button tidak terlalu bongsor/tinggi
   },
   saveButtonText: {
     color: '#FFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: 'PoppinsSemiBold', // Menggunakan Poppins sesuai permintaan sebelumnya
   },
 });
