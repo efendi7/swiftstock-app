@@ -2,8 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, StatusBar, StyleSheet, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db } from '../../services/firebaseConfig';
+import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'; // Tambahkan 'where'
+import { db, auth } from '../../services/firebaseConfig'; // Tambahkan 'auth'
 import { TransactionSearchBar, TransactionFilterSection, TransactionList } from '../../components/transactions';
 import { FilterMode, SortType, Transaction } from '../../types/transaction.type';
 
@@ -12,7 +12,7 @@ const TransactionScreen = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false); // TODO: Sesuaikan dengan auth logic
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [searchInput, setSearchInput] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
@@ -22,13 +22,41 @@ const TransactionScreen = () => {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(currentYear);
 
-  // FETCH ALL TRANSACTIONS - Mirip ProductScreen
+  // LOGIKA DETEKSI ROLE (Admin/Kasir)
+  useEffect(() => {
+    const checkRole = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        const token = await user.getIdTokenResult();
+        setIsAdmin(token.claims.role === 'admin');
+      }
+    };
+    checkRole();
+  }, []);
+
+  // FETCH DATA DENGAN FILTER ROLE
   const loadTransactions = useCallback(async () => {
     try {
       setRefreshing(true);
-      const q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
+      const user = auth.currentUser;
+      if (!user) return;
+
+      let q;
+      const transactionsRef = collection(db, 'transactions');
+
+      if (isAdmin) {
+        // Jika ADMIN: Ambil semua transaksi
+        q = query(transactionsRef, orderBy('createdAt', 'desc'));
+      } else {
+        // Jika KASIR: Hanya ambil transaksi miliknya sendiri berdasarkan cashierId
+        q = query(
+          transactionsRef,
+          where('cashierId', '==', user.uid),
+          orderBy('createdAt', 'desc')
+        );
+      }
+
       const snapshot = await getDocs(q);
-      
       const transactionsList: Transaction[] = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
@@ -41,17 +69,16 @@ const TransactionScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [isAdmin]); // Re-run ketika status isAdmin berubah
 
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
 
-  // CLIENT-SIDE FILTERING & SORTING (Realtime - Mirip ProductScreen)
+  // CLIENT-SIDE FILTERING (Sama seperti sebelumnya)
   const filteredData = useMemo(() => {
     let filtered = [...transactions];
 
-    // 1. Filter by Search
     if (searchInput.trim()) {
       const lower = searchInput.toLowerCase();
       filtered = filtered.filter(t => 
@@ -61,7 +88,6 @@ const TransactionScreen = () => {
       );
     }
 
-    // 2. Filter by Time Mode
     if (filterMode === 'today') {
       const today = new Date();
       filtered = filtered.filter(t => {
@@ -79,11 +105,9 @@ const TransactionScreen = () => {
       });
     }
 
-    // 3. Sorting
     filtered.sort((a, b) => {
       const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
       const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
-      
       return selectedSort === 'latest' ? dateB - dateA : dateA - dateB;
     });
 
@@ -103,7 +127,7 @@ const TransactionScreen = () => {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
       <LinearGradient colors={['#00A79D', '#00D4C8']} style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <Text style={styles.headerTitle}>Transaksi</Text>
+        <Text style={styles.headerTitle}>{isAdmin ? 'Laporan Penjualan' : 'Riwayat Saya'}</Text>
         {isAdmin && <Text style={styles.adminText}>Mode Admin</Text>}
       </LinearGradient>
 
