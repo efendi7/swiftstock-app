@@ -2,10 +2,10 @@ import React from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Image } from 'react-native';
 import { 
   Tag, 
-  Zap, 
+  HandCoins, 
   Layers, 
   Barcode, 
-  Wallet, 
+  Coins, 
   Truck, 
   LayoutGrid, 
   Maximize,
@@ -108,7 +108,7 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
           value={price}
           onChangeText={onChangePrice}
           keyboardType="numeric"
-          icon={<Zap size={18} color={COLORS.primary} />}
+          icon={<HandCoins size={18} color={COLORS.primary} />}
           onFocusCallback={onFieldFocus}
         />
       </View>
@@ -118,7 +118,7 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
           value={purchasePrice}
           onChangeText={onChangePurchasePrice}
           keyboardType="numeric"
-          icon={<Wallet size={18} color={COLORS.primary} />}
+          icon={<Coins size={18} color={COLORS.primary} />}
           onFocusCallback={onFieldFocus}
         />
       </View>
@@ -152,7 +152,7 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
         <Text style={styles.btnText}>SCAN</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.btnAlt} onPress={onAutoGeneratePress}>
-        <Zap size={16} color="#fff" />
+        <HandCoins size={16} color="#fff" />
         <Text style={styles.btnText}>AUTO</Text>
       </TouchableOpacity>
     </View>

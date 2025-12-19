@@ -16,8 +16,14 @@ import {
 } from 'react-native';
 
 import { Mail, Lock } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 import { loginUser } from '../../services/authService';
 import FloatingLabelInput from '../../components/FloatingLabelInput';
+
+// Tipe navigasi (Sesuaikan dengan setup project Anda)
+type LoginNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
 
 const { height } = Dimensions.get('window');
 
@@ -38,6 +44,7 @@ const LoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
 
+  const navigation = useNavigation<LoginNavigationProp>();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
 
@@ -77,12 +84,7 @@ const LoginScreen = () => {
     setIsLoading(true);
     try {
       await loginUser(email.trim(), password);
-
-      /**
-       * 🚫 JANGAN navigate di sini
-       * AppNavigator akan otomatis
-       * mengarahkan user berdasarkan role
-       */
+      // Catatan: Navigasi biasanya dihandle otomatis oleh Auth State di App.js
     } catch (error) {
       Alert.alert('Login Gagal', 'Email atau Password salah.');
     } finally {
@@ -150,22 +152,27 @@ const LoginScreen = () => {
             )}
           </TouchableOpacity>
 
-          {!isKeyboardVisible && (
-            <Text style={styles.footerText}>
-              Swiftstock by Efendi • © 2025
+          {/* Link ke Register */}
+          <TouchableOpacity
+            style={styles.registerLink}
+            onPress={() => navigation.navigate('Register')}
+            disabled={isLoading}
+          >
+            <Text style={styles.registerText}>
+              Belum punya akun? <Text style={styles.registerTextHighlight}>Daftar di sini</Text>
             </Text>
-          )}
+          </TouchableOpacity>
         </Animated.View>
+
+        {!isKeyboardVisible && (
+          <Text style={styles.footerText}>
+            Swiftstock by Efendi • © 2025
+          </Text>
+        )}
       </ScrollView>
     </KeyboardAvoidingView>
   );
 };
-
-export default LoginScreen;
-
-/* ===========================
-   STYLES
-=========================== */
 
 const styles = StyleSheet.create({
   container: {
@@ -187,7 +194,7 @@ const styles = StyleSheet.create({
     padding: 25,
     ...Platform.select({
       ios: {
-        shadowColor: COLORS.primary,
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.1,
         shadowRadius: 12,
@@ -208,7 +215,7 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     marginBottom: 8,
     textAlign: 'center',
-    fontWeight: '700',
+    fontFamily: 'MontserratBold', // Diselaraskan dengan Register
   },
   subtitle: {
     fontSize: 14,
@@ -216,6 +223,7 @@ const styles = StyleSheet.create({
     marginBottom: 25,
     textAlign: 'center',
     lineHeight: 20,
+    fontFamily: 'PoppinsRegular', // Diselaraskan dengan Register
   },
   loginButton: {
     backgroundColor: COLORS.secondary,
@@ -224,17 +232,6 @@ const styles = StyleSheet.create({
     marginTop: 15,
     alignItems: 'center',
     justifyContent: 'center',
-    ...Platform.select({
-      ios: {
-        shadowColor: COLORS.secondary,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 5,
-      },
-    }),
   },
   loginButtonDisabled: {
     backgroundColor: COLORS.disabled,
@@ -242,12 +239,28 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#FFFFFF',
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: 'PoppinsSemiBold', // Diselaraskan dengan Register
+  },
+  registerLink: {
+    marginTop: 20,
+    alignItems: 'center',
+  },
+  registerText: {
+    color: COLORS.textLight,
+    fontSize: 14,
+    fontFamily: 'PoppinsRegular',
+  },
+  registerTextHighlight: {
+    color: COLORS.primary,
+    fontFamily: 'PoppinsSemiBold',
   },
   footerText: {
     marginTop: 30,
     fontSize: 12,
     color: COLORS.textLight,
     textAlign: 'center',
+    fontFamily: 'PoppinsRegular',
   },
 });
+
+export default LoginScreen;

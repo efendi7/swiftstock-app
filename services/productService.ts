@@ -15,7 +15,7 @@ const UPLOAD_PRESET = 'expo_products';
 
 export class ProductService {
   /**
-   * Generate unique barcode (15 digit)
+   * Generate Barcode Unik (15 digit)
    */
   static generateUniqueBarcode(): string {
     const timestamp = new Date().getTime().toString();
