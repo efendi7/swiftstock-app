@@ -1,12 +1,16 @@
-// services/productService.ts
-import { collection, addDoc, query, where, getDocs, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs, 
+  serverTimestamp, 
+  writeBatch, 
+  doc 
+} from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import { Product } from '../models/Product';
-
-export interface ProductValidationResult {
-  isValid: boolean;
-  error?: string;
-}
+import { Product, ProductFormData, ProductValidationResult } from '../models/Product';
 
 export class ProductService {
   /**
@@ -21,7 +25,25 @@ export class ProductService {
   }
 
   /**
-   * Check if barcode already exists in Firestore
+   * Upload Gambar ke Firebase Storage
+   */
+  static async uploadImage(uri: string): Promise<string> {
+    try {
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const storage = getStorage();
+      const fileRef = ref(storage, `products/${Date.now()}.jpg`);
+      
+      await uploadBytes(fileRef, blob);
+      return await getDownloadURL(fileRef);
+    } catch (error) {
+      console.error("Upload error:", error);
+      throw new Error("Gagal mengunggah gambar");
+    }
+  }
+
+  /**
+   * Check if barcode already exists
    */
   static async checkBarcodeExists(barcode: string): Promise<boolean> {
     try {
@@ -38,19 +60,15 @@ export class ProductService {
   }
 
   /**
-   * Validate product data including Purchase Price and Supplier
+   * Validasi data produk menggunakan model ProductFormData
    */
-  static validateProduct(
-    name: string,
-    price: string,
-    purchasePrice: string,
-    stock: string,
-    barcode: string
-  ): ProductValidationResult {
+  static validateProduct(data: ProductFormData): ProductValidationResult {
+    const { name, price, purchasePrice, stock, barcode } = data;
+
     if (!name || !price || !purchasePrice || !stock || !barcode) {
       return {
         isValid: false,
-        error: 'Silakan isi semua data produk wajib (Nama, Harga Jual, Harga Beli, Stok, dan Barcode).',
+        error: 'Silakan isi semua data produk wajib.',
       };
     }
 
@@ -59,121 +77,73 @@ export class ProductService {
     const stockNum = parseInt(stock);
 
     if (isNaN(priceNum) || isNaN(purchasePriceNum) || isNaN(stockNum)) {
-      return {
-        isValid: false,
-        error: 'Harga jual, harga beli, dan stok harus berupa angka.',
-      };
+      return { isValid: false, error: 'Harga dan stok harus berupa angka.' };
     }
 
-    if (purchasePriceNum <= 0) {
-      return { isValid: false, error: 'Harga beli harus lebih dari 0.' };
-    }
-
-    if (priceNum < purchasePriceNum) {
-      return { 
-        isValid: false, 
-        error: 'Peringatan: Harga jual tidak boleh lebih kecil dari harga beli (rugi).' 
-      };
-    }
-
-    if (stockNum < 0) {
-      return { isValid: false, error: 'Stok tidak boleh negatif.' };
-    }
+    if (purchasePriceNum <= 0) return { isValid: false, error: 'Harga beli harus lebih dari 0.' };
+    if (priceNum < purchasePriceNum) return { isValid: false, error: 'Harga jual tidak boleh lebih kecil dari harga beli.' };
+    if (stockNum < 0) return { isValid: false, error: 'Stok tidak boleh negatif.' };
 
     return { isValid: true };
   }
 
   /**
-   * Add new product to database AND record the stock purchase
+   * Add new product menggunakan Model ProductFormData
    */
-  static async addProduct(
-    name: string,
-    price: string,
-    purchasePrice: string,
-    supplier: string,
-    category: string,
-    stock: string,
-    barcode: string
-  ): Promise<void> {
+  static async addProduct(data: ProductFormData): Promise<void> {
     
-    const validation = this.validateProduct(name, price, purchasePrice, stock, barcode);
-    if (!validation.isValid) {
-      throw new Error(validation.error);
-    }
+    // 1. Validasi
+    const validation = this.validateProduct(data);
+    if (!validation.isValid) throw new Error(validation.error);
 
-    const isDuplicate = await this.checkBarcodeExists(barcode);
-    if (isDuplicate) {
-      throw new Error('Barcode ini sudah terdaftar untuk produk lain.');
-    }
+    // 2. Cek Barcode Duplikat
+    const isDuplicate = await this.checkBarcodeExists(data.barcode);
+    if (isDuplicate) throw new Error('Barcode ini sudah terdaftar.');
 
     try {
       const batch = writeBatch(db);
 
-      // 1. Tambahkan produk ke collection 'products'
+      // 3. Siapkan Dokumen Produk Baru
       const productRef = doc(collection(db, 'products'));
+      
+      // Menggunakan tipe data 'any' sementara untuk Firestore Timestamp, 
+      // atau biarkan Firestore yang mengurusnya.
       const productData = {
-        name: name.trim(),
-        price: parseFloat(price),
-        purchasePrice: parseFloat(purchasePrice),
-        supplier: supplier.trim() || 'Umum',
-        category: category.trim() || 'Tanpa Kategori',
-        stock: parseInt(stock),
-        barcode: barcode.trim(),
+        name: data.name.trim(),
+        price: parseFloat(data.price),
+        purchasePrice: parseFloat(data.purchasePrice),
+        supplier: data.supplier?.trim() || 'Umum',
+        category: data.category?.trim() || 'Tanpa Kategori',
+        stock: parseInt(data.stock),
+        barcode: data.barcode.trim(),
+        imageUrl: data.imageUrl, // Diambil dari model
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+      
       batch.set(productRef, productData);
 
-      // 2. 🔥 CATAT PEMBELIAN STOK ke collection 'stock_purchases'
+      // 4. Catat Stok Awal (Stock Purchase)
       const stockPurchaseRef = doc(collection(db, 'stock_purchases'));
       const purchaseData = {
         productId: productRef.id,
-        productName: name.trim(),
-        barcode: barcode.trim(),
-        quantity: parseInt(stock),
-        purchasePrice: parseFloat(purchasePrice),
-        totalCost: parseInt(stock) * parseFloat(purchasePrice), // Total modal
-        supplier: supplier.trim() || 'Umum',
+        productName: data.name.trim(),
+        barcode: data.barcode.trim(),
+        quantity: parseInt(data.stock),
+        purchasePrice: parseFloat(data.purchasePrice),
+        totalCost: parseInt(data.stock) * parseFloat(data.purchasePrice),
+        supplier: data.supplier?.trim() || 'Umum',
         date: serverTimestamp(),
-        type: 'initial_stock', // Tipe: stok awal
+        type: 'initial_stock',
       };
+      
       batch.set(stockPurchaseRef, purchaseData);
 
-      // Commit semua operasi sekaligus
+      // 5. Jalankan Batch
       await batch.commit();
-
     } catch (error) {
       console.error('Error adding product:', error);
       throw new Error('Gagal menyimpan data ke database.');
-    }
-  }
-
-  /**
-   * 🆕 Record additional stock purchase (untuk restock)
-   */
-  static async recordStockPurchase(
-    productId: string,
-    productName: string,
-    barcode: string,
-    quantity: number,
-    purchasePrice: number,
-    supplier: string
-  ): Promise<void> {
-    try {
-      await addDoc(collection(db, 'stock_purchases'), {
-        productId,
-        productName,
-        barcode,
-        quantity,
-        purchasePrice,
-        totalCost: quantity * purchasePrice,
-        supplier: supplier || 'Umum',
-        date: serverTimestamp(),
-        type: 'restock',
-      });
-    } catch (error) {
-      console.error('Error recording stock purchase:', error);
-      throw new Error('Gagal mencatat pembelian stok.');
     }
   }
 }

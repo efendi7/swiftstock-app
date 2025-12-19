@@ -1,4 +1,3 @@
-// types/product.types.ts
 export interface ProductFormData {
   name: string;
   price: string;
@@ -7,6 +6,7 @@ export interface ProductFormData {
   barcode: string;
   supplier?: string;
   category?: string;
+  imageUrl: string; // Tambahkan ini untuk menampung URL hasil upload
 }
 
 export interface Product {
@@ -18,7 +18,8 @@ export interface Product {
   category?: string;
   stock: number;
   barcode: string;
-  createdAt: any; // Firebase Timestamp
+  imageUrl?: string; // Tambahkan ini (optional karena mungkin produk lama belum punya foto)
+  createdAt: any; 
 }
 
 export interface ProductValidationResult {

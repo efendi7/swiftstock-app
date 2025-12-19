@@ -1,4 +1,3 @@
-// screens/Main/ProductScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { SafeAreaView, StatusBar, View, ActivityIndicator, Text } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
@@ -15,8 +14,9 @@ import ProductList from '../../components/products/ProductList';
 import FloatingAddButton from '../../components/products/FloatingAddButton';
 import { Product } from '../../types/product.types';
 
-type SortType = 'newest' | 'oldest' | 'stock-high' | 'stock-low';
-type FilterMode = 'all' | 'specificMonth';
+// UPDATE: Sesuaikan dengan FilterSection yang baru
+type SortType = 'newest' | 'oldest' | 'stock-high' | 'stock-low' | 'low-stock-warn' | 'safe-stock';
+type FilterMode = 'all' | 'specificMonth' | 'today';
 
 const ProductScreen = ({ navigation }: any) => {
   const [products, setProducts] = useState<Product[]>([]);
@@ -26,7 +26,7 @@ const ProductScreen = ({ navigation }: any) => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
-  const [sortType, setSortType] = useState<SortType>('newest');
+  const [sortType, setSortType] = useState<SortType>('newest'); // Default terbaru
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -57,6 +57,14 @@ const ProductScreen = ({ navigation }: any) => {
     }, [loadProducts])
   );
 
+  const handleSortChange = (newSort: SortType) => {
+    setSortType(newSort);
+  };
+
+  const handleFilterModeChange = (newMode: FilterMode) => {
+    setFilterMode(newMode);
+  };
+
   const filterProps = {
     products,
     searchQuery,
@@ -65,32 +73,37 @@ const ProductScreen = ({ navigation }: any) => {
     selectedMonth,
     selectedYear,
     onFiltered: setFilteredProducts,
-    onSearchChange: setSearchQuery,
-    onFilterModeChange: setFilterMode,
-    onSortChange: setSortType,
+    onFilterModeChange: handleFilterModeChange,
+    onSortChange: handleSortChange,
     onMonthChange: setSelectedMonth,
     onYearChange: setSelectedYear,
   };
 
   if (loading && products.length === 0) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
         <ActivityIndicator size="large" color={COLORS.secondary} />
-        <Text style={{ marginTop: 10, color: COLORS.textLight }}>Memuat produk...</Text>
+        <Text style={{ marginTop: 10, color: COLORS.textLight, fontFamily: 'PoppinsRegular' }}>Memuat produk...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.primary }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
 
-      <ScreenHeader title="Daftar Produk" subtitle="Manajemen Produk" />
+      <ScreenHeader title="Daftar Produk" subtitle="Manajemen Stok & Harga" />
 
       <RoundedContentScreen>
         <SearchBar value={searchQuery} onChange={setSearchQuery} />
+        
         <FilterSection {...filterProps} />
-        <ProductList data={filteredProducts} refreshing={refreshing} onRefresh={loadProducts} />
+        
+        <ProductList 
+          data={filteredProducts} 
+          refreshing={refreshing} 
+          onRefresh={loadProducts} 
+        />
       </RoundedContentScreen>
 
       <FloatingAddButton onPress={() => navigation?.navigate('AddProduct')} />
