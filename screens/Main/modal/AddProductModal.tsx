@@ -12,12 +12,16 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+
+// Constants & Hooks
 import { COLORS } from '../../../constants/colors';
 import { useProductForm } from '../../../hooks/useProductForm';
-import { ProductFormHeader } from '../../../components/product/ProductFormHeader';
-import { ProductFormFields } from '../../../components/product/ProductFormFields';
-import { SubmitButton } from '../../../components/product/SubmitButton';
-import BarcodeScannerScreen from './../BarcodeScannerScreen';
+
+// Components (Updated Path to addproduct)
+import { ProductFormHeader } from '../../../components/addproduct/ProductFormHeader';
+import { ProductFormFields } from '../../../components/addproduct/ProductFormFields';
+import { SubmitButton } from '../../../components/addproduct/SubmitButton';
+import BarcodeScannerScreen from '../BarcodeScannerScreen';
 
 const { height } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = height * 0.85;
@@ -25,9 +29,8 @@ const MAX_MODAL_HEIGHT = height * 0.85;
 interface AddProductModalProps {
   visible: boolean;
   onClose: () => void;
-  onSuccess?: () => void | Promise<void>; // ✅ OPTIONAL
+  onSuccess?: () => void | Promise<void>;
 }
-
 
 const AddProductModal: React.FC<AddProductModalProps> = ({
   visible,
@@ -37,26 +40,40 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
   const slideAnim = useRef(new Animated.Value(height)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
-  /* =============================
-     HANDLE CLOSE (STABLE)
-  ============================== */
-const handleClose = useCallback(() => {
-  Animated.timing(slideAnim, {
-    toValue: height,
-    duration: 250,
-    useNativeDriver: true,
-  }).start(async () => {
-    if (onSuccess) {
-      await onSuccess(); // aman, dicek dulu
+  // --- Animation Logic ---
+  const animateModal = useCallback((toValue: number, callback?: () => void) => {
+    if (toValue === 0) {
+      Animated.spring(slideAnim, {
+        toValue,
+        useNativeDriver: true,
+        damping: 20,
+        stiffness: 90,
+      }).start(callback);
+    } else {
+      Animated.timing(slideAnim, {
+        toValue: height,
+        duration: 250,
+        useNativeDriver: true,
+      }).start(callback);
     }
-    onClose();
-  });
-}, [onClose, onSuccess, slideAnim]);
+  }, [slideAnim]);
 
+  const handleClose = useCallback(() => {
+    animateModal(height, async () => {
+      if (onSuccess) await onSuccess();
+      onClose();
+    });
+  }, [onClose, onSuccess, animateModal]);
 
-  /* =============================
-     PRODUCT FORM HOOK
-  ============================== */
+  useEffect(() => {
+    if (visible) {
+      animateModal(0);
+    } else {
+      slideAnim.setValue(height);
+    }
+  }, [visible, animateModal, slideAnim]);
+
+  // --- Form Logic ---
   const {
     formData,
     loading,
@@ -68,25 +85,6 @@ const handleClose = useCallback(() => {
     setShowScanner,
   } = useProductForm(handleClose);
 
-  /* =============================
-     OPEN / CLOSE ANIMATION
-  ============================== */
-  useEffect(() => {
-    if (visible) {
-      Animated.spring(slideAnim, {
-        toValue: 0,
-        useNativeDriver: true,
-        damping: 20,
-        stiffness: 90,
-      }).start();
-    } else {
-      slideAnim.setValue(height);
-    }
-  }, [visible, slideAnim]);
-
-  /* =============================
-     SCROLL TO INPUT
-  ============================== */
   const handleFieldFocus = (fieldY: number) => {
     scrollViewRef.current?.scrollTo({
       y: fieldY - 60,
@@ -96,36 +94,29 @@ const handleClose = useCallback(() => {
 
   return (
     <Modal transparent visible={visible} animationType="none">
-      <StatusBar
-        translucent
-        backgroundColor="transparent"
-        barStyle="light-content"
-      />
+      <StatusBar translucent backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
 
       <View style={styles.overlay}>
-        {/* BACKDROP */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
 
-        {/* MODAL */}
-        <Animated.View
-          style={[
-            styles.modalContainer,
-            {
-              maxHeight: MAX_MODAL_HEIGHT,
-              transform: [{ translateY: slideAnim }],
-            },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardView}
         >
-          {/* HEADER */}
-          <ProductFormHeader onClose={handleClose} isModal />
+          <Animated.View
+            style={[
+              styles.modalContainer,
+              {
+                maxHeight: MAX_MODAL_HEIGHT,
+                transform: [{ translateY: slideAnim }],
+              },
+            ]}
+          >
+            <ProductFormHeader onClose={handleClose} isModal />
 
-          <View style={styles.contentWrapper}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-              keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 0}
-            >
+            <View style={styles.contentWrapper}>
               <ScrollView
                 ref={scrollViewRef}
                 showsVerticalScrollIndicator={false}
@@ -134,11 +125,11 @@ const handleClose = useCallback(() => {
               >
                 <ProductFormFields
                   {...formData}
+                  // Helper untuk update field secara dinamis jika diperlukan, 
+                  // atau tetap explisit seperti ini untuk type-safety yang kuat:
                   onChangeName={(v) => updateField('name', v)}
                   onChangePrice={(v) => updateField('price', v)}
-                  onChangePurchasePrice={(v) =>
-                    updateField('purchasePrice', v)
-                  }
+                  onChangePurchasePrice={(v) => updateField('purchasePrice', v)}
                   onChangeSupplier={(v) => updateField('supplier', v)}
                   onChangeCategory={(v) => updateField('category', v)}
                   onChangeStock={(v) => updateField('stock', v)}
@@ -148,27 +139,24 @@ const handleClose = useCallback(() => {
                   onFieldFocus={handleFieldFocus}
                 />
 
-                <SubmitButton
-                  loading={loading}
-                  onPress={handleSubmit}
-                />
+                <SubmitButton loading={loading} onPress={handleSubmit} />
 
                 <Text style={styles.infoFooter}>
                   Pastikan kategori, harga beli, dan pemasok diisi agar laporan laba akurat.
                 </Text>
               </ScrollView>
-            </KeyboardAvoidingView>
-          </View>
+            </View>
 
-          {/* BARCODE SCANNER */}
-          {showScanner && (
-            <BarcodeScannerScreen
-              visible={showScanner}
-              onClose={() => setShowScanner(false)}
-              onScan={handleBarcodeScanned}
-            />
-          )}
-        </Animated.View>
+            {/* BARCODE SCANNER MODAL */}
+            {showScanner && (
+              <BarcodeScannerScreen
+                visible={showScanner}
+                onClose={() => setShowScanner(false)}
+                onScan={handleBarcodeScanned}
+              />
+            )}
+          </Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -183,6 +171,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
+  keyboardView: {
+    justifyContent: 'flex-end',
+  },
   modalContainer: {
     backgroundColor: COLORS.primary,
     borderTopLeftRadius: 30,
@@ -194,6 +185,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -16,
+    flexShrink: 1, // Memastikan konten tidak "meledak" keluar screen
   },
   scrollContent: {
     paddingHorizontal: 20,

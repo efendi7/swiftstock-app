@@ -1,4 +1,5 @@
-import React, { useRef, useEffect } from 'react';
+// screens/Main/AdminDashboard.tsx
+import React, { useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,7 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { AdminTabParamList } from '../../navigation/types';
 
@@ -26,20 +27,24 @@ const AdminDashboard = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavigationProp>();
 
-
   const { loading, stats, refreshData } = useDashboard();
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const HEADER_MAX_HEIGHT = 230 + insets.top;
   const HEADER_MIN_HEIGHT = 70 + insets.top;
 
-  /* REFRESH SAAT TAB AKTIF */
+  // Refresh saat pertama kali dibuka
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', refreshData);
-    return unsubscribe;
-  }, [navigation, refreshData]);
+    refreshData();
+  }, [refreshData]);
 
-  /* HEADER ANIMATION */
+  // Refresh setiap kali screen ini difocus (kembali dari ProductScreen, dll)
+  useFocusEffect(
+    useCallback(() => {
+      refreshData();
+    }, [refreshData])
+  );
+
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 140],
     outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT],
@@ -60,9 +65,9 @@ const AdminDashboard = () => {
         headerHeight={headerHeight}
         revenueOpacity={revenueOpacity}
         topPadding={insets.top + 10}
-        totalRevenue={stats.totalRevenue}
-        totalExpense={stats.totalExpense}
-        totalProfit={stats.totalProfit}
+        totalRevenue={stats.totalRevenue || 0}
+        totalExpense={stats.totalExpense || 0}
+        totalProfit={stats.totalProfit || 0}
       />
 
       <Animated.ScrollView
@@ -79,19 +84,22 @@ const AdminDashboard = () => {
         scrollEventThrottle={16}
       >
         {loading ? (
-          <ActivityIndicator size="large" color={COLORS.secondary} style={{ marginTop: 50 }} />
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.secondary} />
+            <Text style={styles.loadingText}>Memuat data dashboard...</Text>
+          </View>
         ) : (
           <>
             <StatsGrid
-              totalProducts={stats.totalProducts}
-              inToday={stats.inToday}
-              outToday={stats.outToday}
+              totalProducts={stats.totalProducts || 0}
+              inToday={stats.inToday || 0}
+              outToday={stats.outToday || 0}
             />
 
-            <DashboardChart data={stats.weeklyData} />
+            <DashboardChart data={stats.weeklyData || []} />
 
             <LowStockAlert
-              count={stats.lowStockCount}
+              count={stats.lowStockCount || 0}
               onPress={() => navigation.navigate('Product')}
             />
 
@@ -111,6 +119,16 @@ const AdminDashboard = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 50,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: COLORS.textLight,
+    fontSize: 14,
+  },
   demoContent: {
     height: 100,
     marginTop: 10,

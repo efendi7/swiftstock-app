@@ -3,13 +3,16 @@ import { Alert } from 'react-native';
 import { ProductFormData } from '../models/Product';
 import { ProductService } from '../services/productService';
 
-export const useProductForm = (onSuccess?: () => void) => {
+export const useProductForm = (
+  onSuccess?: () => void   // Tetap dipertahankan untuk backward compatibility
+) => {
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     price: '',
     purchasePrice: '',
     supplier: '',
-    category: '',    stock: '',
+    category: '',
+    stock: '',
     barcode: '',
   });
 
@@ -46,28 +49,31 @@ export const useProductForm = (onSuccess?: () => void) => {
     });
 
   const handleSubmit = async () => {
+    // Validasi minimal (bisa diperbaiki lagi nanti)
     if (!formData.name || !formData.price || !formData.purchasePrice || !formData.category) {
-      Alert.alert('Error', 'Nama, harga jual, dan harga beli wajib diisi');
+      Alert.alert('Error', 'Nama, harga jual, harga beli, dan kategori wajib diisi');
       return;
     }
 
     setLoading(true);
     try {
       await ProductService.addProduct(
-  formData.name,
-  formData.price,
-  formData.purchasePrice,
-  formData.supplier,
-  formData.category,
-  formData.stock,
-  formData.barcode
-);
-
+        formData.name,
+        formData.price,
+        formData.purchasePrice,
+        formData.supplier || '',
+        formData.category,
+        formData.stock || '0',
+        formData.barcode || ''
+      );
 
       resetForm();
-      onSuccess?.();
+      
+      // Ini kunci utamanya!
+      onSuccess?.(); // Panggil callback (bisa refresh ProductScreen + Dashboard)
+
     } catch (e: any) {
-      Alert.alert('Error', e.message);
+      Alert.alert('Error', e.message || 'Gagal menambahkan produk');
     } finally {
       setLoading(false);
     }
@@ -82,5 +88,6 @@ export const useProductForm = (onSuccess?: () => void) => {
     generateBarcode,
     handleBarcodeScanned,
     handleSubmit,
+    resetForm, // Opsional: expose jika perlu dari luar
   };
 };

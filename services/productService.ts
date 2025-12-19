@@ -1,6 +1,7 @@
-import { collection, addDoc, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+// services/productService.ts
+import { collection, addDoc, query, where, getDocs, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import { Product } from '../models/Product'; // Menggunakan model yang sudah kita perbarui
+import { Product } from '../models/Product';
 
 export interface ProductValidationResult {
   isValid: boolean;
@@ -46,7 +47,6 @@ export class ProductService {
     stock: string,
     barcode: string
   ): ProductValidationResult {
-    // 1. Cek Kelengkapan Data
     if (!name || !price || !purchasePrice || !stock || !barcode) {
       return {
         isValid: false,
@@ -58,7 +58,6 @@ export class ProductService {
     const purchasePriceNum = parseFloat(purchasePrice);
     const stockNum = parseInt(stock);
 
-    // 2. Cek Format Angka
     if (isNaN(priceNum) || isNaN(purchasePriceNum) || isNaN(stockNum)) {
       return {
         isValid: false,
@@ -66,7 +65,6 @@ export class ProductService {
       };
     }
 
-    // 3. Logika Bisnis (Harga & Stok)
     if (purchasePriceNum <= 0) {
       return { isValid: false, error: 'Harga beli harus lebih dari 0.' };
     }
@@ -86,7 +84,7 @@ export class ProductService {
   }
 
   /**
-   * Add new product to database
+   * Add new product to database AND record the stock purchase
    */
   static async addProduct(
     name: string,
@@ -98,37 +96,84 @@ export class ProductService {
     barcode: string
   ): Promise<void> {
     
-    // Jalankan Validasi
     const validation = this.validateProduct(name, price, purchasePrice, stock, barcode);
     if (!validation.isValid) {
       throw new Error(validation.error);
     }
 
-    // Cek Duplikasi Barcode
     const isDuplicate = await this.checkBarcodeExists(barcode);
     if (isDuplicate) {
       throw new Error('Barcode ini sudah terdaftar untuk produk lain.');
     }
 
     try {
-      // Mapping ke object Product (tanpa ID karena ID di-generate Firestore)
-      // Omit 'id' dari Product interface saat addDoc
+      const batch = writeBatch(db);
+
+      // 1. Tambahkan produk ke collection 'products'
+      const productRef = doc(collection(db, 'products'));
       const productData = {
         name: name.trim(),
         price: parseFloat(price),
         purchasePrice: parseFloat(purchasePrice),
-        supplier: supplier.trim() || 'Umum', // Default ke 'Umum' jika kosong
+        supplier: supplier.trim() || 'Umum',
         category: category.trim() || 'Tanpa Kategori',
         stock: parseInt(stock),
         barcode: barcode.trim(),
-        createdAt: serverTimestamp(), // Menggunakan serverTimestamp agar waktu konsisten
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+      batch.set(productRef, productData);
 
-      await addDoc(collection(db, 'products'), productData);
+      // 2. 🔥 CATAT PEMBELIAN STOK ke collection 'stock_purchases'
+      const stockPurchaseRef = doc(collection(db, 'stock_purchases'));
+      const purchaseData = {
+        productId: productRef.id,
+        productName: name.trim(),
+        barcode: barcode.trim(),
+        quantity: parseInt(stock),
+        purchasePrice: parseFloat(purchasePrice),
+        totalCost: parseInt(stock) * parseFloat(purchasePrice), // Total modal
+        supplier: supplier.trim() || 'Umum',
+        date: serverTimestamp(),
+        type: 'initial_stock', // Tipe: stok awal
+      };
+      batch.set(stockPurchaseRef, purchaseData);
+
+      // Commit semua operasi sekaligus
+      await batch.commit();
+
     } catch (error) {
       console.error('Error adding product:', error);
       throw new Error('Gagal menyimpan data ke database.');
+    }
+  }
+
+  /**
+   * 🆕 Record additional stock purchase (untuk restock)
+   */
+  static async recordStockPurchase(
+    productId: string,
+    productName: string,
+    barcode: string,
+    quantity: number,
+    purchasePrice: number,
+    supplier: string
+  ): Promise<void> {
+    try {
+      await addDoc(collection(db, 'stock_purchases'), {
+        productId,
+        productName,
+        barcode,
+        quantity,
+        purchasePrice,
+        totalCost: quantity * purchasePrice,
+        supplier: supplier || 'Umum',
+        date: serverTimestamp(),
+        type: 'restock',
+      });
+    } catch (error) {
+      console.error('Error recording stock purchase:', error);
+      throw new Error('Gagal mencatat pembelian stok.');
     }
   }
 }

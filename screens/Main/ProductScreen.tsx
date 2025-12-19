@@ -1,95 +1,43 @@
+// screens/Main/ProductScreen.tsx
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-  StatusBar,
-  TextInput,
-  SafeAreaView,
-} from 'react-native';
+import { SafeAreaView, StatusBar, View, ActivityIndicator, Text } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../services/firebaseConfig';
-import { collection, getDocs, query } from 'firebase/firestore';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import Collapsible from 'react-native-collapsible';
+import { COLORS } from '../../constants/colors';
 
-const COLORS = {
-  primary: '#1C3A5A',
-  secondary: '#00A79D',
-  background: '#F8FAFC',
-  cardBg: '#FFFFFF',
-  success: '#10B981',
-  warning: '#F59E0B',
-  danger: '#EF4444',
-  textDark: '#1E293B',
-  textLight: '#64748B',
-  border: '#E2E8F0',
-};
+import { ScreenHeader } from '../../components/common/ScreenHeader';
+import { RoundedContentScreen } from '../../components/common/RoundedContentScreen';
+
+import SearchBar from '../../components/products/SearchBar';
+import FilterSection from '../../components/products/FilterSection';
+import ProductList from '../../components/products/ProductList';
+import FloatingAddButton from '../../components/products/FloatingAddButton';
+import { Product } from '../../types/product.types';
 
 type SortType = 'newest' | 'oldest' | 'stock-high' | 'stock-low';
-type FilterMode = 'all' | 'specificMonth' | 'dateRange';
+type FilterMode = 'all' | 'specificMonth';
 
-const MONTH_NAMES = [
-  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-];
-
-interface Product {
-  id: string;
-  name: string;
-  price: number;
-  purchasePrice: number; // Field Baru
-  supplier: string;      // Field Baru
-  stock: number;
-  barcode: string;
-  createdAt: any;
-}
-
-const ProductScreen = () => {
+const ProductScreen = ({ navigation }: any) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // UI States
-  const [isFilterExpanded, setIsFilterExpanded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Filter States
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [sortType, setSortType] = useState<SortType>('newest');
-  
-  // Month Picker States
-  const currentYear = new Date().getFullYear();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  // Date Range States
-  const [startDate, setStartDate] = useState<Date | null>(null);
-  const [endDate, setEndDate] = useState<Date | null>(null);
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  useEffect(() => {
-    applyFilters();
-  }, [products, sortType, filterMode, selectedMonth, selectedYear, startDate, endDate, searchQuery]);
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       setRefreshing(true);
-      const productsRef = collection(db, 'products');
-      const snapshot = await getDocs(query(productsRef));
-      const productsList: Product[] = [];
-      snapshot.forEach((doc) => {
-        productsList.push({ id: doc.id, ...doc.data() } as Product);
-      });
+      const snapshot = await getDocs(collection(db, 'products'));
+      const productsList: Product[] = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      } as Product));
       setProducts(productsList);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -97,247 +45,57 @@ const ProductScreen = () => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  const applyFilters = useCallback(() => {
-    let filtered = [...products];
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
 
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(p => 
-        p.name.toLowerCase().includes(q) || 
-        p.barcode.includes(q) ||
-        p.supplier?.toLowerCase().includes(q)
-      );
-    }
+  useFocusEffect(
+    useCallback(() => {
+      loadProducts();
+    }, [loadProducts])
+  );
 
-    if (filterMode === 'specificMonth') {
-      filtered = filtered.filter(p => {
-        if (!p.createdAt) return false;
-        const date = p.createdAt.toDate();
-        return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
-      });
-    } else if (filterMode === 'dateRange' && startDate && endDate) {
-      const start = new Date(startDate.setHours(0, 0, 0, 0));
-      const end = new Date(endDate.setHours(23, 59, 59, 999));
-      filtered = filtered.filter(p => {
-        if (!p.createdAt) return false;
-        const pDate = p.createdAt.toDate();
-        return pDate >= start && pDate <= end;
-      });
-    }
-
-    filtered.sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-      const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
-      switch (sortType) {
-        case 'newest': return dateB - dateA;
-        case 'oldest': return dateA - dateB;
-        case 'stock-high': return b.stock - a.stock;
-        case 'stock-low': return a.stock - b.stock;
-        default: return 0;
-      }
-    });
-
-    setFilteredProducts(filtered);
-  }, [products, sortType, filterMode, selectedMonth, selectedYear, startDate, endDate, searchQuery]);
-
-  const renderMonthPicker = () => {
-    if (filterMode !== 'specificMonth') return null;
-    return (
-      <View style={styles.pickerContainer}>
-        <TouchableOpacity onPress={() => {
-          if (selectedMonth === 0) { setSelectedMonth(11); setSelectedYear(selectedYear - 1); }
-          else setSelectedMonth(selectedMonth - 1);
-        }} style={styles.arrowButton}><Text style={styles.arrowText}>←</Text></TouchableOpacity>
-        <Text style={styles.monthYearText}>{MONTH_NAMES[selectedMonth]} {selectedYear}</Text>
-        <TouchableOpacity onPress={() => {
-          if (selectedMonth === 11) { setSelectedMonth(0); setSelectedYear(selectedYear + 1); }
-          else setSelectedMonth(selectedMonth + 1);
-        }} style={styles.arrowButton}><Text style={styles.arrowText}>→</Text></TouchableOpacity>
-      </View>
-    );
-  };
-
-  const renderDateRangePicker = () => {
-    if (filterMode !== 'dateRange') return null;
-    return (
-      <View style={styles.dateRangeContainer}>
-        <TouchableOpacity style={styles.dateButton} onPress={() => setShowStartPicker(true)}>
-          <Text style={styles.dateButtonText}>Dari: {startDate ? startDate.toLocaleDateString('id-ID') : 'Pilih'}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.dateButton} onPress={() => setShowEndPicker(true)}>
-          <Text style={styles.dateButtonText}>Sampai: {endDate ? endDate.toLocaleDateString('id-ID') : 'Pilih'}</Text>
-        </TouchableOpacity>
-        {showStartPicker && (
-          <DateTimePicker value={startDate || new Date()} mode="date" display="default"
-            onChange={(e, d) => { setShowStartPicker(false); if (d) setStartDate(d); }} />
-        )}
-        {showEndPicker && (
-          <DateTimePicker value={endDate || new Date()} mode="date" display="default"
-            onChange={(e, d) => { setShowEndPicker(false); if (d) setEndDate(d); }} />
-        )}
-      </View>
-    );
-  };
-
-  const ProductCard = ({ item }: { item: Product }) => {
-    const margin = item.price - (item.purchasePrice || 0);
-    return (
-      <View style={styles.productCard}>
-        <View style={styles.productHeader}>
-          <View style={styles.productInfo}>
-            <Text style={styles.productName}>{item.name}</Text>
-            <Text style={styles.supplierLabel}>📦 Pemasok: {item.supplier || 'Umum'}</Text>
-            <Text style={styles.productBarcode}>Code: {item.barcode}</Text>
-          </View>
-          <View style={[styles.stockBadge, { backgroundColor: item.stock < 10 ? COLORS.danger : COLORS.success }]}>
-            <Text style={styles.stockText}>{item.stock}</Text>
-          </View>
-        </View>
-        
-        <View style={styles.priceSection}>
-          <View style={styles.priceCol}>
-            <Text style={styles.labelTiny}>Harga Beli</Text>
-            <Text style={styles.purchaseText}>Rp {item.purchasePrice?.toLocaleString('id-ID') || 0}</Text>
-          </View>
-          <View style={[styles.priceCol, { alignItems: 'flex-end' }]}>
-            <Text style={styles.labelTiny}>Harga Jual</Text>
-            <Text style={styles.sellText}>Rp {item.price.toLocaleString('id-ID')}</Text>
-          </View>
-        </View>
-
-        <View style={styles.productFooter}>
-          <Text style={styles.dateText}>{item.createdAt?.toDate().toLocaleDateString('id-ID')}</Text>
-          <View style={[styles.profitBadge, { backgroundColor: margin >= 0 ? '#E8F5E9' : '#FFEBEE' }]}>
-            <Text style={[styles.profitText, { color: margin >= 0 ? COLORS.success : COLORS.danger }]}>
-              Untung: Rp {margin.toLocaleString('id-ID')}
-            </Text>
-          </View>
-        </View>
-      </View>
-    );
+  const filterProps = {
+    products,
+    searchQuery,
+    filterMode,
+    sortType,
+    selectedMonth,
+    selectedYear,
+    onFiltered: setFilteredProducts,
+    onSearchChange: setSearchQuery,
+    onFilterModeChange: setFilterMode,
+    onSortChange: setSortType,
+    onMonthChange: setSelectedMonth,
+    onYearChange: setSelectedYear,
   };
 
   if (loading && products.length === 0) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
         <ActivityIndicator size="large" color={COLORS.secondary} />
-        <Text style={styles.loadingText}>Memuat produk...</Text>
+        <Text style={{ marginTop: 10, color: COLORS.textLight }}>Memuat produk...</Text>
       </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={{ flex: 1 }}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manajemen Produk</Text>
-        <View style={styles.searchContainer}>
-          <TextInput 
-            style={styles.searchInput} 
-            placeholder="Cari nama, barcode, atau supplier..." 
-            value={searchQuery}
-            onChangeText={setSearchQuery} 
-            placeholderTextColor={COLORS.textLight} 
-          />
-          {searchQuery ? <TouchableOpacity onPress={() => setSearchQuery('')}><Text style={styles.clearIcon}>✕</Text></TouchableOpacity> : null}
-        </View>
-      </View>
 
-      <TouchableOpacity style={styles.toggleButton} onPress={() => setIsFilterExpanded(!isFilterExpanded)}>
-        <Text style={styles.toggleText}>{isFilterExpanded ? '↑ Tutup Filter' : '↓ Filter & Urutkan'}</Text>
-        <Text style={styles.countText}>{filteredProducts.length} Produk</Text>
-      </TouchableOpacity>
+      <ScreenHeader title="Daftar Produk" subtitle="Manajemen Produk" />
 
-      <Collapsible collapsed={!isFilterExpanded}>
-        <View style={styles.filterBox}>
-          <View style={styles.row}>
-            <TouchableOpacity style={[styles.chip, filterMode === 'all' && styles.chipActive]} 
-              onPress={() => {setFilterMode('all'); setIsFilterExpanded(false);}}>
-              <Text style={[styles.chipText, filterMode === 'all' && styles.chipTextActive]}>Semua</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chip, filterMode === 'specificMonth' && styles.chipActive]} 
-              onPress={() => setFilterMode('specificMonth')}>
-              <Text style={[styles.chipText, filterMode === 'specificMonth' && styles.chipTextActive]}>Bulan</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chip, filterMode === 'dateRange' && styles.chipActive]} 
-              onPress={() => setFilterMode('dateRange')}>
-              <Text style={[styles.chipText, filterMode === 'dateRange' && styles.chipTextActive]}>Rentang</Text>
-            </TouchableOpacity>
-          </View>
-          {renderMonthPicker()}
-          {renderDateRangePicker()}
-          <View style={styles.row}>
-            <TouchableOpacity style={[styles.sortBtn, sortType === 'stock-high' && styles.chipActive]} onPress={() => setSortType('stock-high')}>
-              <Text style={[styles.chipText, sortType === 'stock-high' && styles.chipTextActive]}>Stok Tinggi</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.sortBtn, sortType === 'newest' && styles.chipActive]} onPress={() => setSortType('newest')}>
-              <Text style={[styles.chipText, sortType === 'newest' && styles.chipTextActive]}>Terbaru</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Collapsible>
+      <RoundedContentScreen>
+        <SearchBar value={searchQuery} onChange={setSearchQuery} />
+        <FilterSection {...filterProps} />
+        <ProductList data={filteredProducts} refreshing={refreshing} onRefresh={loadProducts} />
+      </RoundedContentScreen>
 
-      <FlatList 
-        data={filteredProducts} 
-        renderItem={({ item }) => <ProductCard item={item} />}
-        keyExtractor={item => item.id} 
-        contentContainerStyle={{ padding: 16 }}
-        refreshing={refreshing} 
-        onRefresh={loadProducts} 
-      />
+      <FloatingAddButton onPress={() => navigation?.navigate('AddProduct')} />
     </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 10, color: COLORS.textLight },
-  header: { padding: 16, backgroundColor: COLORS.primary },
-  headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFF', marginBottom: 12 },
-  searchContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', borderRadius: 10, paddingHorizontal: 12 },
-  searchInput: { flex: 1, paddingVertical: 10, color: COLORS.textDark },
-  clearIcon: { padding: 5, color: COLORS.textLight, fontSize: 18 },
-  toggleButton: { flexDirection: 'row', justifyContent: 'space-between', padding: 15, backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: COLORS.border },
-  toggleText: { color: COLORS.secondary, fontWeight: 'bold' },
-  countText: { color: COLORS.textLight },
-  filterBox: { backgroundColor: '#FFF', padding: 15, borderBottomWidth: 1, borderColor: COLORS.border },
-  row: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  chip: { flex: 1, padding: 10, backgroundColor: COLORS.background, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
-  sortBtn: { flex: 1, padding: 10, backgroundColor: '#F0F0F0', borderRadius: 8, alignItems: 'center' },
-  chipActive: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
-  chipText: { color: COLORS.textDark, fontSize: 12 },
-  chipTextActive: { color: '#FFF', fontWeight: 'bold' },
-  
-  productCard: { backgroundColor: '#FFF', padding: 16, borderRadius: 16, marginBottom: 12, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 4 },
-  productHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  productInfo: { flex: 1 },
-  productName: { fontSize: 16, fontWeight: 'bold', color: COLORS.textDark },
-  supplierLabel: { fontSize: 12, color: COLORS.secondary, marginTop: 4, fontWeight: '600' },
-  productBarcode: { fontSize: 11, color: COLORS.textLight, marginTop: 2 },
-  stockBadge: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  stockText: { color: '#FFF', fontWeight: 'bold' },
-  
-  priceSection: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#F1F5F9', marginTop: 5 },
-  priceCol: { flex: 1 },
-  labelTiny: { fontSize: 10, color: COLORS.textLight, marginBottom: 2, textTransform: 'uppercase' },
-  purchaseText: { fontSize: 14, color: COLORS.textDark, fontWeight: '500' },
-  sellText: { fontSize: 15, color: COLORS.secondary, fontWeight: 'bold' },
-
-  productFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  dateText: { fontSize: 11, color: COLORS.textLight },
-  profitBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  profitText: { fontSize: 11, fontWeight: 'bold' },
-
-  pickerContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginVertical: 10 },
-  arrowButton: { padding: 10 },
-  arrowText: { fontSize: 20, color: COLORS.secondary, fontWeight: 'bold' },
-  monthYearText: { fontSize: 16, fontWeight: 'bold', marginHorizontal: 20 },
-  dateRangeContainer: { flexDirection: 'row', gap: 10, marginVertical: 10 },
-  dateButton: { flex: 1, padding: 12, backgroundColor: COLORS.background, borderRadius: 8, alignItems: 'center' },
-  dateButtonText: { fontSize: 12, color: COLORS.textDark },
-});
 
 export default ProductScreen;

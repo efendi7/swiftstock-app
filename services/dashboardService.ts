@@ -1,11 +1,11 @@
-import { collection, getDocs, Timestamp } from 'firebase/firestore';
+// services/dashboardService.ts
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { DashboardStats, ChartDataPoint } from '../types/dashboard.types';
 
 export class DashboardService {
   /**
    * Fungsi untuk memformat angka ke mata uang Rupiah
-   * Dipanggil di DashboardHeader
    */
   static formatCurrency(amount: number): string {
     return new Intl.NumberFormat('id-ID', {
@@ -29,22 +29,33 @@ export class DashboardService {
         last7DaysMap.set(daysName[d.getDay()], 0);
       }
 
-      // Ambil Produk
+      // 1. Hitung jumlah produk & stok rendah
       const productsSnap = await getDocs(collection(db, 'products'));
       let lowStockCount = 0;
       let inToday = 0;
 
       productsSnap.forEach(doc => {
         const data = doc.data();
-        if (Number(data.stock || 0) < 10) lowStockCount++;
+        const stock = Number(data.stock || 0);
         const createdAt = data.createdAt?.toDate();
+
+        if (stock < 10) lowStockCount++;
         if (createdAt && createdAt >= startOfToday) inToday++;
       });
 
-      // Ambil Transaksi
+      // 2. 🔥 HITUNG TOTAL PENGELUARAN dari semua pembelian stok
+      const stockPurchasesSnap = await getDocs(collection(db, 'stock_purchases'));
+      let totalExpense = 0;
+
+      stockPurchasesSnap.forEach(doc => {
+        const data = doc.data();
+        const totalCost = Number(data.totalCost || 0);
+        totalExpense += totalCost;
+      });
+
+      // 3. Hitung pendapatan dari transaksi penjualan
       const transactionsSnap = await getDocs(collection(db, 'transactions'));
       let totalRevenue = 0;
-      let totalExpense = 0;
       let outToday = 0;
 
       transactionsSnap.forEach(doc => {
@@ -54,18 +65,17 @@ export class DashboardService {
 
         totalRevenue += total;
 
+        // Update chart 7 hari terakhir
         if (tDate) {
           const dayName = daysName[tDate.getDay()];
           if (last7DaysMap.has(dayName)) {
             last7DaysMap.set(dayName, (last7DaysMap.get(dayName) || 0) + total);
           }
 
-          if (Array.isArray(data.items)) {
+          // Hitung barang keluar hari ini
+          if (Array.isArray(data.items) && tDate >= startOfToday) {
             data.items.forEach((item: any) => {
-              const qty = Number(item.qty || 0);
-              const purchasePrice = Number(item.purchasePrice || 0);
-              totalExpense += (purchasePrice * qty);
-              if (tDate >= startOfToday) outToday += qty;
+              outToday += Number(item.qty || 0);
             });
           }
         }
@@ -80,12 +90,12 @@ export class DashboardService {
         totalProducts: productsSnap.size,
         totalTransactions: transactionsSnap.size,
         totalRevenue,
-        totalExpense,
+        totalExpense, // ✅ Sekarang dari total pembelian stok
         totalProfit: totalRevenue - totalExpense,
         lowStockCount,
         inToday,
         outToday,
-        weeklyData, // Data ini wajib dikembalikan
+        weeklyData,
       };
     } catch (error) {
       console.error("Dashboard Service Error:", error);
