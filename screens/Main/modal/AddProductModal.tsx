@@ -17,7 +17,7 @@ import {
 import { COLORS } from '../../../constants/colors';
 import { useProductForm } from '../../../hooks/useProductForm';
 
-// Components (Updated Path to addproduct)
+// Components
 import { ProductFormHeader } from '../../../components/addproduct/ProductFormHeader';
 import { ProductFormFields } from '../../../components/addproduct/ProductFormFields';
 import { SubmitButton } from '../../../components/addproduct/SubmitButton';
@@ -26,10 +26,11 @@ import BarcodeScannerScreen from '../BarcodeScannerScreen';
 const { height } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = height * 0.85;
 
+// Interface untuk Props agar tidak ada error TypeScript "implicitly any"
 interface AddProductModalProps {
   visible: boolean;
   onClose: () => void;
-  onSuccess?: () => void | Promise<void>;
+  onSuccess?: () => void;
 }
 
 const AddProductModal: React.FC<AddProductModalProps> = ({
@@ -37,10 +38,10 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  // --- Animation Logic ---
   const slideAnim = useRef(new Animated.Value(height)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
-  // --- Animation Logic ---
   const animateModal = useCallback((toValue: number, callback?: () => void) => {
     if (toValue === 0) {
       Animated.spring(slideAnim, {
@@ -58,13 +59,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
     }
   }, [slideAnim]);
 
-  const handleClose = useCallback(() => {
-    animateModal(height, async () => {
-      if (onSuccess) await onSuccess();
-      onClose();
-    });
-  }, [onClose, onSuccess, animateModal]);
-
+  // Efek saat modal dibuka atau ditutup dari props visible
   useEffect(() => {
     if (visible) {
       animateModal(0);
@@ -73,17 +68,32 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
     }
   }, [visible, animateModal, slideAnim]);
 
-  // --- Form Logic ---
+  // --- Form Logic dari Hook ---
   const {
     formData,
     loading,
     showScanner,
+    imageUri, // State URI lokal untuk preview
     updateField,
     generateBarcode,
     handleBarcodeScanned,
     handleSubmit,
     setShowScanner,
-  } = useProductForm(handleClose);
+    pickImage,
+    removeImage,
+    resetForm
+  } = useProductForm(() => {
+    // Callback ketika sukses simpan
+    if (onSuccess) onSuccess();
+    handleClose();
+  });
+
+  const handleClose = useCallback(() => {
+    animateModal(height, () => {
+      resetForm(); // Reset data form saat modal ditutup
+      onClose();
+    });
+  }, [onClose, animateModal, resetForm]);
 
   const handleFieldFocus = (fieldY: number) => {
     scrollViewRef.current?.scrollTo({
@@ -97,6 +107,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
       <StatusBar translucent backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
 
       <View style={styles.overlay}>
+        {/* Backdrop clickable untuk menutup modal */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
@@ -114,6 +125,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
               },
             ]}
           >
+            {/* Header Biru Modal */}
             <ProductFormHeader onClose={handleClose} isModal />
 
             <View style={styles.contentWrapper}>
@@ -123,10 +135,16 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
+                {/* Input Fields Produk */}
                 <ProductFormFields
-                  {...formData}
-                  // Helper untuk update field secara dinamis jika diperlukan, 
-                  // atau tetap explisit seperti ini untuk type-safety yang kuat:
+                  name={formData.name}
+                  price={formData.price}
+                  purchasePrice={formData.purchasePrice}
+                  supplier={formData.supplier}
+                  category={formData.category}
+                  stock={formData.stock}
+                  barcode={formData.barcode}
+                  imageUri={imageUri} // Menggunakan imageUri dari hook
                   onChangeName={(v) => updateField('name', v)}
                   onChangePrice={(v) => updateField('price', v)}
                   onChangePurchasePrice={(v) => updateField('purchasePrice', v)}
@@ -134,12 +152,18 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
                   onChangeCategory={(v) => updateField('category', v)}
                   onChangeStock={(v) => updateField('stock', v)}
                   onChangeBarcode={(v) => updateField('barcode', v)}
+                  onPickImage={pickImage}
+                  onRemoveImage={removeImage}
                   onScanPress={() => setShowScanner(true)}
                   onAutoGeneratePress={generateBarcode}
                   onFieldFocus={handleFieldFocus}
                 />
 
-                <SubmitButton loading={loading} onPress={handleSubmit} />
+                {/* Tombol Submit dengan Loading State */}
+                <SubmitButton 
+                  loading={loading} 
+                  onPress={handleSubmit} 
+                />
 
                 <Text style={styles.infoFooter}>
                   Pastikan kategori, harga beli, dan pemasok diisi agar laporan laba akurat.
@@ -147,7 +171,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
               </ScrollView>
             </View>
 
-            {/* BARCODE SCANNER MODAL */}
+            {/* MODAL SCANNER BARCODE */}
             {showScanner && (
               <BarcodeScannerScreen
                 visible={showScanner}
@@ -185,7 +209,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     marginTop: -16,
-    flexShrink: 1, // Memastikan konten tidak "meledak" keluar screen
+    flexShrink: 1,
   },
   scrollContent: {
     paddingHorizontal: 20,

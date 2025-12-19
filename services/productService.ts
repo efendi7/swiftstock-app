@@ -1,7 +1,5 @@
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   collection, 
-  addDoc, 
   query, 
   where, 
   getDocs, 
@@ -10,7 +8,10 @@ import {
   doc 
 } from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import { Product, ProductFormData, ProductValidationResult } from '../models/Product';
+import { ProductFormData, ProductValidationResult } from '../models/Product';
+
+const CLOUD_NAME = 'dlkrdbabo'; 
+const UPLOAD_PRESET = 'expo_products'; 
 
 export class ProductService {
   /**
@@ -25,51 +26,13 @@ export class ProductService {
   }
 
   /**
-   * Upload Gambar ke Firebase Storage
-   */
-  static async uploadImage(uri: string): Promise<string> {
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-      const storage = getStorage();
-      const fileRef = ref(storage, `products/${Date.now()}.jpg`);
-      
-      await uploadBytes(fileRef, blob);
-      return await getDownloadURL(fileRef);
-    } catch (error) {
-      console.error("Upload error:", error);
-      throw new Error("Gagal mengunggah gambar");
-    }
-  }
-
-  /**
-   * Check if barcode already exists
-   */
-  static async checkBarcodeExists(barcode: string): Promise<boolean> {
-    try {
-      const q = query(
-        collection(db, 'products'),
-        where('barcode', '==', barcode.trim())
-      );
-      const querySnapshot = await getDocs(q);
-      return !querySnapshot.empty;
-    } catch (error) {
-      console.error('Error checking barcode:', error);
-      throw new Error('Gagal memeriksa barcode');
-    }
-  }
-
-  /**
-   * Validasi data produk menggunakan model ProductFormData
+   * Validasi data produk
    */
   static validateProduct(data: ProductFormData): ProductValidationResult {
     const { name, price, purchasePrice, stock, barcode } = data;
 
     if (!name || !price || !purchasePrice || !stock || !barcode) {
-      return {
-        isValid: false,
-        error: 'Silakan isi semua data produk wajib.',
-      };
+      return { isValid: false, error: 'Silakan isi semua data produk wajib.' };
     }
 
     const priceNum = parseFloat(price);
@@ -88,26 +51,62 @@ export class ProductService {
   }
 
   /**
-   * Add new product menggunakan Model ProductFormData
+   * Upload ke Cloudinary
+   */
+  static async uploadImage(uri: string): Promise<string> {
+    try {
+      const formData = new FormData();
+      const uriParts = uri.split('.');
+      const fileType = uriParts[uriParts.length - 1];
+
+      formData.append('file', {
+        uri: uri,
+        name: `product_${Date.now()}.${fileType}`,
+        type: `image/${fileType}`,
+      } as any);
+      
+      formData.append('upload_preset', UPLOAD_PRESET);
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error?.message || 'Upload gagal');
+
+      return result.secure_url.replace('/upload/', '/upload/w_600,q_auto,f_auto/');
+    } catch (error) {
+      console.error("Cloudinary Error:", error);
+      throw new Error("Gagal mengunggah gambar ke server.");
+    }
+  }
+
+  static async checkBarcodeExists(barcode: string): Promise<boolean> {
+    const q = query(collection(db, 'products'), where('barcode', '==', barcode.trim()));
+    const querySnapshot = await getDocs(q);
+    return !querySnapshot.empty;
+  }
+
+  /**
+   * Add Product (Menerima 1 argumen ProductFormData yang sudah berisi imageUrl)
    */
   static async addProduct(data: ProductFormData): Promise<void> {
-    
-    // 1. Validasi
+    // 1. Validasi Internal
     const validation = this.validateProduct(data);
     if (!validation.isValid) throw new Error(validation.error);
 
-    // 2. Cek Barcode Duplikat
+    // 2. Cek Duplikat
     const isDuplicate = await this.checkBarcodeExists(data.barcode);
     if (isDuplicate) throw new Error('Barcode ini sudah terdaftar.');
 
     try {
       const batch = writeBatch(db);
-
-      // 3. Siapkan Dokumen Produk Baru
       const productRef = doc(collection(db, 'products'));
       
-      // Menggunakan tipe data 'any' sementara untuk Firestore Timestamp, 
-      // atau biarkan Firestore yang mengurusnya.
       const productData = {
         name: data.name.trim(),
         price: parseFloat(data.price),
@@ -116,16 +115,15 @@ export class ProductService {
         category: data.category?.trim() || 'Tanpa Kategori',
         stock: parseInt(data.stock),
         barcode: data.barcode.trim(),
-        imageUrl: data.imageUrl, // Diambil dari model
+        imageUrl: data.imageUrl, 
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
       
       batch.set(productRef, productData);
 
-      // 4. Catat Stok Awal (Stock Purchase)
       const stockPurchaseRef = doc(collection(db, 'stock_purchases'));
-      const purchaseData = {
+      batch.set(stockPurchaseRef, {
         productId: productRef.id,
         productName: data.name.trim(),
         barcode: data.barcode.trim(),
@@ -135,15 +133,12 @@ export class ProductService {
         supplier: data.supplier?.trim() || 'Umum',
         date: serverTimestamp(),
         type: 'initial_stock',
-      };
-      
-      batch.set(stockPurchaseRef, purchaseData);
+      });
 
-      // 5. Jalankan Batch
       await batch.commit();
     } catch (error) {
-      console.error('Error adding product:', error);
-      throw new Error('Gagal menyimpan data ke database.');
+      console.error("Firestore Error:", error);
+      throw new Error('Gagal menyimpan ke database');
     }
   }
 }
