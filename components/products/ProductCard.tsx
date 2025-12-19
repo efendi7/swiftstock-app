@@ -1,6 +1,7 @@
 // components/products/ProductCard.tsx
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, ScrollView } from 'react-native';
+import { Package, AlertCircle, X } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
 import { Product } from '../../types/product.types';
 
@@ -9,75 +10,248 @@ interface Props {
 }
 
 const ProductCard = ({ item }: Props) => {
+  const [modalVisible, setModalVisible] = useState(false);
+  const isLowStock = item.stock < 10;
   const margin = item.price - item.purchasePrice;
   const isProfit = margin >= 0;
 
   return (
-    <View style={styles.card}>
-      <View style={styles.header}>
-        <View style={styles.info}>
-          <Text style={styles.name}>{item.name}</Text>
-          <Text style={styles.category}>Kategori: {item.category || 'Tanpa Kategori'}</Text>
-          <Text style={styles.supplier}>Pemasok: {item.supplier || 'Umum'}</Text>
-          <Text style={styles.barcode}>Code: {item.barcode}</Text>
+    <>
+      <TouchableOpacity 
+        style={styles.card}
+        onPress={() => setModalVisible(true)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.iconContainer}>
+          {isLowStock ? (
+            <AlertCircle size={24} color={COLORS.danger} />
+          ) : (
+            <Package size={24} color={COLORS.success} />
+          )}
         </View>
-        <View style={[styles.stockBadge, { backgroundColor: item.stock < 10 ? COLORS.danger : COLORS.success }]}>
-          <Text style={styles.stockText}>{item.stock}</Text>
+        
+        <View style={styles.content}>
+          <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
+          <View style={styles.stockContainer}>
+            <Text style={[styles.stockText, { color: isLowStock ? COLORS.danger : COLORS.success }]}>
+              {isLowStock ? 'Stok Menipis' : 'Stok Aman'}
+            </Text>
+            <Text style={styles.stockNumber}>• {item.stock} unit</Text>
+          </View>
         </View>
-      </View>
+      </TouchableOpacity>
 
-      <View style={styles.priceSection}>
-        <View>
-          <Text style={styles.label}>Harga Beli</Text>
-          <Text style={styles.purchasePrice}>Rp {item.purchasePrice.toLocaleString('id-ID')}</Text>
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.label}>Harga Jual</Text>
-          <Text style={styles.sellPrice}>Rp {item.price.toLocaleString('id-ID')}</Text>
-        </View>
-      </View>
+      {/* Modal Detail */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Detail Produk</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X size={24} color={COLORS.textDark} />
+              </TouchableOpacity>
+            </View>
 
-      <View style={styles.footer}>
-        <Text style={styles.date}>
-          {item.createdAt?.toDate?.().toLocaleDateString('id-ID') || '-'}
-        </Text>
-        <View style={[styles.profitBadge, { backgroundColor: isProfit ? '#E8F5E9' : '#FFEBEE' }]}>
-          <Text style={[styles.profitText, { color: isProfit ? COLORS.success : COLORS.danger }]}>
-            {isProfit ? 'Untung' : 'Rugi'}: Rp {Math.abs(margin).toLocaleString('id-ID')}
-          </Text>
+            <ScrollView style={styles.modalBody}>
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Nama Produk</Text>
+                <Text style={styles.detailValue}>{item.name}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Kode Produk</Text>
+                <Text style={styles.detailValue}>{item.barcode}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Kategori</Text>
+                <Text style={styles.detailValue}>{item.category || 'Tanpa Kategori'}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Pemasok</Text>
+                <Text style={styles.detailValue}>{item.supplier || 'Umum'}</Text>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Stok Tersedia</Text>
+                <View style={[styles.stockBadge, { backgroundColor: isLowStock ? COLORS.danger : COLORS.success }]}>
+                  <Text style={styles.stockBadgeText}>{item.stock} unit</Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Harga Beli</Text>
+                <Text style={styles.priceValue}>Rp {item.purchasePrice.toLocaleString('id-ID')}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Harga Jual</Text>
+                <Text style={[styles.priceValue, styles.sellPrice]}>Rp {item.price.toLocaleString('id-ID')}</Text>
+              </View>
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Margin</Text>
+                <View style={[styles.profitBadge, { backgroundColor: isProfit ? '#E8F5E9' : '#FFEBEE' }]}>
+                  <Text style={[styles.profitText, { color: isProfit ? COLORS.success : COLORS.danger }]}>
+                    {isProfit ? 'Untung' : 'Rugi'}: Rp {Math.abs(margin).toLocaleString('id-ID')}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.divider} />
+
+              <View style={styles.detailSection}>
+                <Text style={styles.detailLabel}>Tanggal Dibuat</Text>
+                <Text style={styles.detailValue}>
+                  {item.createdAt?.toDate?.().toLocaleDateString('id-ID', { 
+                    day: 'numeric', 
+                    month: 'long', 
+                    year: 'numeric' 
+                  }) || '-'}
+                </Text>
+              </View>
+            </ScrollView>
+          </View>
         </View>
-      </View>
-    </View>
+      </Modal>
+    </>
   );
 };
 
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFF',
-    padding: 18,
-    borderRadius: 24,
-    marginBottom: 14,
-    elevation: 4,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+    elevation: 2,
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  info: { flex: 1 },
-  name: { fontSize: 17, fontWeight: 'bold', color: COLORS.textDark },
-  category: { fontSize: 13, color: COLORS.secondary, marginTop: 4, fontWeight: '600' },
-  supplier: { fontSize: 12, color: COLORS.textLight, marginTop: 2 },
-  barcode: { fontSize: 11, color: COLORS.textLight, marginTop: 4 },
-  stockBadge: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
-  stockText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
-  priceSection: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 12, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#F1F5F9' },
-  label: { fontSize: 10, color: COLORS.textLight, textTransform: 'uppercase', letterSpacing: 0.5 },
-  purchasePrice: { fontSize: 15, color: COLORS.textDark, fontWeight: '600', marginTop: 4 },
-  sellPrice: { fontSize: 16, color: COLORS.secondary, fontWeight: 'bold', marginTop: 4 },
-  footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 },
-  date: { fontSize: 11, color: COLORS.textLight },
-  profitBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8 },
-  profitText: { fontSize: 12, fontWeight: 'bold' },
+  iconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  content: {
+    flex: 1,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+    marginBottom: 6,
+  },
+  stockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stockText: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  stockNumber: {
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginLeft: 4,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#FFF',
+    borderRadius: 24,
+    width: '100%',
+    maxHeight: '80%',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.textDark,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  detailSection: {
+    marginBottom: 16,
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: COLORS.textLight,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 6,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: COLORS.textDark,
+    fontWeight: '500',
+  },
+  priceValue: {
+    fontSize: 18,
+    color: COLORS.textDark,
+    fontWeight: 'bold',
+  },
+  sellPrice: {
+    color: COLORS.secondary,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginVertical: 12,
+  },
+  stockBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  stockBadgeText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  profitBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  profitText: {
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
 });
 
 export default ProductCard;

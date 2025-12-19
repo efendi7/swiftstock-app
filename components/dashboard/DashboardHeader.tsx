@@ -12,6 +12,8 @@ import {
   LogOut,
   TrendingUp,
   TrendingDown,
+  Siren,
+  HeartPulse,
 } from 'lucide-react-native';
 import { signOut } from 'firebase/auth';
 import { auth } from '../../services/firebaseConfig';
@@ -25,6 +27,8 @@ interface DashboardHeaderProps {
   totalRevenue: number;
   totalExpense: number;
   totalProfit: number;
+  lowStockCount: number; // 🔔 Tambah prop
+  onLowStockPress: () => void; // 🔔 Handler ketika bell diklik
 }
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -34,30 +38,34 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   totalRevenue,
   totalExpense,
   totalProfit,
+  lowStockCount,
+  onLowStockPress,
 }) => {
-  // --- LOGIKA KONDISI BARU ---
+  // --- LOGIKA KONDISI PROFIT ---
   const isNeutral = totalProfit === 0;
   const isProfit = totalProfit > 0;
 
-  // Menentukan warna teks berdasarkan status
   const getStatusColor = () => {
-    if (isNeutral) return '#FFFF00'; // Kuning untuk netral
-    return isProfit ? '#A5FFB0' : '#FFB3B3'; // Hijau jika untung, merah jika rugi
+    if (isNeutral) return '#FFFF00';
+    return isProfit ? '#A5FFB0' : '#FFB3B3';
   };
 
-  // Menentukan pesan teks
   const getStatusMessage = () => {
     if (isNeutral) return 'masih kosong nih, yuk jualan!';
     return isProfit ? 'wah lagi untung nih!' : 'belum balik modal nih!';
   };
 
-  // Menentukan gambar
   const getStatusImage = () => {
     if (isNeutral) return require('../../assets/images/dashboard/netral.png');
     return isProfit 
       ? require('../../assets/images/dashboard/good.png') 
       : require('../../assets/images/dashboard/sad.png');
   };
+
+  // --- LOGIKA BELL ALERT ---
+  const hasLowStock = lowStockCount > 0;
+  const bellColor = hasLowStock ? '#EF4444' : '#10B981'; // Merah/Hijau
+  const bellBgColor = hasLowStock ? '#FEE2E2' : '#D1FAE5'; // Merah muda/Hijau muda
 
   const handleLogout = async () => {
     try {
@@ -86,12 +94,34 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           <Text style={styles.adminName}>Administrator</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.logoutCircle}
-          onPress={handleLogout}
-        >
-          <LogOut size={20} color="#FFF" />
-        </TouchableOpacity>
+        <View style={styles.headerRightButtons}>
+          {/* 🔔 BELL ALERT */}
+          <TouchableOpacity
+            style={[styles.bellCircle, { backgroundColor: bellBgColor }]}
+            onPress={onLowStockPress}
+            accessibilityLabel={hasLowStock ? `${lowStockCount} produk stok rendah` : 'Stok aman'}
+            accessibilityRole="button"
+          >
+            {hasLowStock ? (
+              <Siren size={20} color={bellColor} />
+            ) : (
+              <HeartPulse size={20} color={bellColor} />
+            )}
+            {hasLowStock && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>{lowStockCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          {/* LOGOUT BUTTON */}
+          <TouchableOpacity
+            style={styles.logoutCircle}
+            onPress={handleLogout}
+          >
+            <LogOut size={20} color="#FFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* PROFIT CARD */}
@@ -121,7 +151,6 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           </Text>
         </View>
 
-        {/* IMAGE */}
         <View style={styles.profitImageWrapper}>
           <Image
             source={getStatusImage()}
@@ -194,6 +223,43 @@ const styles = StyleSheet.create({
     fontFamily: 'MontserratBold',
   },
 
+  // 🔔 Container untuk Bell + Logout
+  headerRightButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+
+  // 🔔 Bell Button dengan warna dinamis
+  bellCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+
+  // 🔔 Badge untuk jumlah stok rendah
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#EF4444',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+
+  badgeText: {
+    color: '#FFF',
+    fontSize: 10,
+    fontFamily: 'PoppinsBold',
+  },
+
   logoutCircle: {
     width: 38,
     height: 38,
@@ -213,7 +279,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    overflow: 'visible', // 🔥 penting: image boleh keluar
+    overflow: 'visible',
   },
 
   profitLeft: {
@@ -231,17 +297,15 @@ const styles = StyleSheet.create({
     fontFamily: 'PoppinsMedium',
   },
 
-  /* WRAPPER TANPA PEMBATAS */
   profitImageWrapper: {
     width: 60,
     height: 56,
     marginLeft: 10,
     justifyContent: 'center',
     alignItems: 'center',
-    overflow: 'visible', // ❌ jangan hidden
+    overflow: 'visible',
   },
 
-  /* IMAGE BEBAS */
   profitImage: {
     width: 90,
     height: 90,
@@ -250,71 +314,57 @@ const styles = StyleSheet.create({
     top: -18,
   },
 
- bottomStats: {
-  marginTop: 10,
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-},
+  bottomStats: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
 
-bottomCardCompact: {
-  flex: 1,
-  flexDirection: 'row',
-  alignItems: 'center',
-  backgroundColor: 'rgba(255,255,255,0.12)',
-  paddingVertical: 8,
-  paddingHorizontal: 10,
-  marginHorizontal: 5,
-  borderRadius: 14,
-},
+  bottomCardCompact: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginHorizontal: 5,
+    borderRadius: 14,
+  },
 
-/* KOTAK ICON SAJA */
-iconBox: {
-  width: 32,
-  height: 32,
-  borderRadius: 10,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
+  bottomTextWrap: {
+    marginLeft: 8,
+    flex: 1,
+  },
 
-/* TEKS DI KANAN */
-bottomTextWrap: {
-  marginLeft: 8,
-  flex: 1,
-},
+  bottomLabel: {
+    fontSize: 10,
+    color: '#FFF',
+    opacity: 0.75,
+    fontFamily: 'PoppinsRegular',
+  },
 
-bottomLabel: {
-  fontSize: 10,
-  color: '#FFF',
-  opacity: 0.75,
-  fontFamily: 'PoppinsRegular',
-},
+  bottomValue: {
+    fontSize: 12,
+    color: '#FFF',
+    marginTop: 1,
+    fontFamily: 'PoppinsBold',
+  },
 
-bottomValue: {
-  fontSize: 12,
-  color: '#FFF',
-  marginTop: 1,
-  fontFamily: 'PoppinsBold',
-},
+  iconBoxGreen: {
+    backgroundColor: '#E9F9EF',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 
-
-/* WARNA MUDA SOLID (BUKAN TRANSPARAN) */
-iconBoxGreen: {
-  backgroundColor: '#E9F9EF', // hijau muda solid
-  width: 32,
-  height: 32,
-  borderRadius: 10,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-iconBoxRed: {
-  backgroundColor: '#FDECEA', // merah muda solid
-  width: 32,
-  height: 32,
-  borderRadius: 10,
-  justifyContent: 'center',
-  alignItems: 'center',
-},
-
-
+  iconBoxRed: {
+    backgroundColor: '#FDECEA',
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

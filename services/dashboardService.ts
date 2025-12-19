@@ -32,25 +32,29 @@ export class DashboardService {
       // 1. Hitung jumlah produk & stok rendah
       const productsSnap = await getDocs(collection(db, 'products'));
       let lowStockCount = 0;
-      let inToday = 0;
 
       productsSnap.forEach(doc => {
         const data = doc.data();
         const stock = Number(data.stock || 0);
-        const createdAt = data.createdAt?.toDate();
-
         if (stock < 10) lowStockCount++;
-        if (createdAt && createdAt >= startOfToday) inToday++;
       });
 
-      // 2. 🔥 HITUNG TOTAL PENGELUARAN dari semua pembelian stok
+      // 2. Hitung stok masuk hari ini dari stock_purchases
       const stockPurchasesSnap = await getDocs(collection(db, 'stock_purchases'));
       let totalExpense = 0;
+      let inToday = 0;
 
       stockPurchasesSnap.forEach(doc => {
         const data = doc.data();
         const totalCost = Number(data.totalCost || 0);
+        const purchaseDate = data.date?.toDate();
+        const quantity = Number(data.quantity || 0);
+
         totalExpense += totalCost;
+
+        if (purchaseDate && purchaseDate >= startOfToday) {
+          inToday += quantity;
+        }
       });
 
       // 3. Hitung pendapatan dari transaksi penjualan
@@ -65,14 +69,12 @@ export class DashboardService {
 
         totalRevenue += total;
 
-        // Update chart 7 hari terakhir
         if (tDate) {
           const dayName = daysName[tDate.getDay()];
           if (last7DaysMap.has(dayName)) {
             last7DaysMap.set(dayName, (last7DaysMap.get(dayName) || 0) + total);
           }
 
-          // Hitung barang keluar hari ini
           if (Array.isArray(data.items) && tDate >= startOfToday) {
             data.items.forEach((item: any) => {
               outToday += Number(item.qty || 0);
@@ -90,7 +92,7 @@ export class DashboardService {
         totalProducts: productsSnap.size,
         totalTransactions: transactionsSnap.size,
         totalRevenue,
-        totalExpense, // ✅ Sekarang dari total pembelian stok
+        totalExpense,
         totalProfit: totalRevenue - totalExpense,
         lowStockCount,
         inToday,

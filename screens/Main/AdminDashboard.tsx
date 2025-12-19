@@ -1,5 +1,5 @@
 // screens/Main/AdminDashboard.tsx
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -7,6 +7,7 @@ import {
   Animated,
   StatusBar,
   ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -19,7 +20,6 @@ import { useDashboard } from '../../hooks/useDashboard';
 import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
 import { StatsGrid } from '../../components/dashboard/StatsGrid';
 import { DashboardChart } from '../../components/dashboard/DashboardChart';
-import { LowStockAlert } from '../../components/dashboard/LowStockAlert';
 
 type NavigationProp = BottomTabNavigationProp<AdminTabParamList, 'AdminDashboard'>;
 
@@ -29,21 +29,27 @@ const AdminDashboard = () => {
 
   const { loading, stats, refreshData } = useDashboard();
   const scrollY = useRef(new Animated.Value(0)).current;
+  
+  const [refreshing, setRefreshing] = useState(false);
 
   const HEADER_MAX_HEIGHT = 230 + insets.top;
   const HEADER_MIN_HEIGHT = 70 + insets.top;
 
-  // Refresh saat pertama kali dibuka
   useEffect(() => {
     refreshData();
   }, [refreshData]);
 
-  // Refresh setiap kali screen ini difocus (kembali dari ProductScreen, dll)
   useFocusEffect(
     useCallback(() => {
       refreshData();
     }, [refreshData])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await refreshData();
+    setRefreshing(false);
+  }, [refreshData]);
 
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 140],
@@ -68,6 +74,8 @@ const AdminDashboard = () => {
         totalRevenue={stats.totalRevenue || 0}
         totalExpense={stats.totalExpense || 0}
         totalProfit={stats.totalProfit || 0}
+        lowStockCount={stats.lowStockCount || 0} // 🔔 Pass low stock count
+        onLowStockPress={() => navigation.navigate('Product')} // 🔔 Navigate ke Product
       />
 
       <Animated.ScrollView
@@ -82,6 +90,15 @@ const AdminDashboard = () => {
           { useNativeDriver: false }
         )}
         scrollEventThrottle={16}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[COLORS.secondary]}
+            tintColor={COLORS.secondary}
+            progressViewOffset={HEADER_MAX_HEIGHT}
+          />
+        }
       >
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -98,10 +115,7 @@ const AdminDashboard = () => {
 
             <DashboardChart data={stats.weeklyData || []} />
 
-            <LowStockAlert
-              count={stats.lowStockCount || 0}
-              onPress={() => navigation.navigate('Product')}
-            />
+            {/* ❌ LowStockAlert DIHAPUS - Sudah di Header */}
 
             <View style={styles.demoContent}>
               <Text style={styles.demoText}>SwiftPay Analytics Engine</Text>
