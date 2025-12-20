@@ -9,7 +9,10 @@ export class DashboardService {
     }).format(amount);
   }
 
-  static async fetchDashboardStats(dateRange: DateRange): Promise<DashboardStats> {
+  static async fetchDashboardStats(
+    dateRange: DateRange, 
+    preset: 'today' | 'week' | 'month' | 'year'
+  ): Promise<DashboardStats> {
     try {
       const startTimestamp = Timestamp.fromDate(dateRange.startDate);
       const endTimestamp = Timestamp.fromDate(dateRange.endDate);
@@ -37,14 +40,8 @@ export class DashboardService {
       const outSnap = await getDocs(outQuery);
       let totalRevenue = 0, totalOut = 0;
       
-      // Map untuk chart (7 hari terakhir)
-      const last7DaysMap = new Map();
-      const daysName = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        last7DaysMap.set(daysName[d.getDay()], 0);
-      }
+      // Generate chart data based on preset
+      const chartDataMap = this.generateChartDataMap(preset);
 
       outSnap.forEach(doc => {
         const data = doc.data();
@@ -53,15 +50,17 @@ export class DashboardService {
         
         const tDate = data.date?.toDate();
         if (tDate) {
-          const dayName = daysName[tDate.getDay()];
-          if (last7DaysMap.has(dayName)) {
-            last7DaysMap.set(dayName, (last7DaysMap.get(dayName) || 0) + total);
+          const key = this.getChartKey(tDate, preset);
+          if (chartDataMap.has(key)) {
+            chartDataMap.set(key, (chartDataMap.get(key) || 0) + total);
           }
           if (Array.isArray(data.items)) {
             data.items.forEach((item: any) => totalOut += Number(item.qty || 0));
           }
         }
       });
+
+      const weeklyData = Array.from(chartDataMap, ([label, value]) => ({ value, label }));
 
       return {
         totalProducts: productsSnap.size,
@@ -72,9 +71,87 @@ export class DashboardService {
         lowStockCount,
         totalIn,
         totalOut,
-        weeklyData: Array.from(last7DaysMap, ([label, value]) => ({ value, label })),
+        weeklyData,
       };
-    } catch (error) { throw error; }
+    } catch (error) { 
+      throw error; 
+    }
+  }
+
+  private static generateChartDataMap(preset: 'today' | 'week' | 'month' | 'year'): Map<string, number> {
+    const map = new Map<string, number>();
+
+    switch (preset) {
+      case 'today':
+        // Jam: 6, 9, 12, 15, 18, 21, 24, 3
+        ['06', '09', '12', '15', '18', '21', '24', '03'].forEach(hour => {
+          map.set(hour, 0);
+        });
+        break;
+
+      case 'week':
+        // Hari: Senin - Minggu
+        const daysName = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+        const today = new Date();
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(today.getDate() - i);
+          map.set(daysName[d.getDay()], 0);
+        }
+        break;
+
+      case 'month':
+        // Minggu: Mg 1, Mg 2, Mg 3, Mg 4
+        ['Mg 1', 'Mg 2', 'Mg 3', 'Mg 4'].forEach(week => {
+          map.set(week, 0);
+        });
+        break;
+
+      case 'year':
+        // Bulan: Jan - Des
+        ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'].forEach(month => {
+          map.set(month, 0);
+        });
+        break;
+    }
+
+    return map;
+  }
+
+  private static getChartKey(date: Date, preset: 'today' | 'week' | 'month' | 'year'): string {
+    switch (preset) {
+      case 'today':
+        // Group by 3-hour intervals
+        const hour = date.getHours();
+        if (hour >= 6 && hour < 9) return '06';
+        if (hour >= 9 && hour < 12) return '09';
+        if (hour >= 12 && hour < 15) return '12';
+        if (hour >= 15 && hour < 18) return '15';
+        if (hour >= 18 && hour < 21) return '18';
+        if (hour >= 21 && hour < 24) return '21';
+        if (hour >= 0 && hour < 3) return '24';
+        if (hour >= 3 && hour < 6) return '03';
+        return '06';
+
+      case 'week':
+        const daysName = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+        return daysName[date.getDay()];
+
+      case 'month':
+        // Week of month (1-4)
+        const dayOfMonth = date.getDate();
+        if (dayOfMonth <= 7) return 'Mg 1';
+        if (dayOfMonth <= 14) return 'Mg 2';
+        if (dayOfMonth <= 21) return 'Mg 3';
+        return 'Mg 4';
+
+      case 'year':
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        return months[date.getMonth()];
+
+      default:
+        return '';
+    }
   }
 
   static getPresetDateRange(preset: 'today' | 'week' | 'month' | 'year'): DateRange {
@@ -83,9 +160,19 @@ export class DashboardService {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
 
-    if (preset === 'week') start.setDate(start.getDate() - 7);
-    else if (preset === 'month') start.setMonth(start.getMonth() - 1);
-    else if (preset === 'year') start.setFullYear(start.getFullYear() - 1);
+    if (preset === 'week') {
+      // Start from Monday of current week
+      const day = start.getDay();
+      const diff = start.getDate() - day + (day === 0 ? -6 : 1);
+      start.setDate(diff);
+    } else if (preset === 'month') {
+      // Start from first day of current month
+      start.setDate(1);
+    } else if (preset === 'year') {
+      // Start from January 1st of current year
+      start.setMonth(0);
+      start.setDate(1);
+    }
 
     return { startDate: start, endDate: end };
   }
