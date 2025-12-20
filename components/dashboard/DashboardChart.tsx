@@ -8,32 +8,90 @@ const { width } = Dimensions.get('window');
 
 interface DashboardChartProps {
   data?: any[];
-  isLoading?: boolean; // Tambahkan ini
+  isLoading?: boolean;
+  selectedPreset: 'today' | 'week' | 'month' | 'year';
 }
 
-export const DashboardChart: React.FC<DashboardChartProps> = ({ data, isLoading }) => {
-  const defaultData = [
-    { value: 0, label: 'Sen' }, { value: 0, label: 'Sel' }, 
-    { value: 0, label: 'Rab' }, { value: 0, label: 'Kam' }, 
-    { value: 0, label: 'Jum' }, { value: 0, label: 'Sab' }, 
-    { value: 0, label: 'Min' }
-  ];
+export const DashboardChart: React.FC<DashboardChartProps> = ({ 
+  data, 
+  isLoading, 
+  selectedPreset 
+}) => {
+  // Generate default data based on selected preset
+  const getDefaultData = () => {
+    switch (selectedPreset) {
+      case 'today':
+        return [
+          { value: 0, label: '06' }, { value: 0, label: '09' },
+          { value: 0, label: '12' }, { value: 0, label: '15' },
+          { value: 0, label: '18' }, { value: 0, label: '21' },
+          { value: 0, label: '24' }, { value: 0, label: '03' }
+        ];
+      case 'week':
+        return [
+          { value: 0, label: 'Sen' }, { value: 0, label: 'Sel' },
+          { value: 0, label: 'Rab' }, { value: 0, label: 'Kam' },
+          { value: 0, label: 'Jum' }, { value: 0, label: 'Sab' },
+          { value: 0, label: 'Min' }
+        ];
+      case 'month':
+        return [
+          { value: 0, label: 'Mg 1' }, { value: 0, label: 'Mg 2' },
+          { value: 0, label: 'Mg 3' }, { value: 0, label: 'Mg 4' }
+        ];
+      case 'year':
+        return [
+          { value: 0, label: 'Jan' }, { value: 0, label: 'Feb' },
+          { value: 0, label: 'Mar' }, { value: 0, label: 'Apr' },
+          { value: 0, label: 'Mei' }, { value: 0, label: 'Jun' },
+          { value: 0, label: 'Jul' }, { value: 0, label: 'Agu' },
+          { value: 0, label: 'Sep' }, { value: 0, label: 'Okt' },
+          { value: 0, label: 'Nov' }, { value: 0, label: 'Des' }
+        ];
+      default:
+        return [];
+    }
+  };
 
+  const defaultData = getDefaultData();
   const chartData = data && data.length > 0 ? data : defaultData;
   const totalValue = chartData.reduce((sum, item) => sum + item.value, 0);
   const maxValue = Math.max(...chartData.map(item => item.value));
-  const avgValue = totalValue / 7;
   const hasValidData = totalValue > 0;
 
-  const getWeekRange = () => {
-    const today = new Date();
-    const day = today.getDay();
-    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(today.setDate(diff));
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const formatDate = (date: Date) => `${date.getDate()}/${date.getMonth() + 1}`;
-    return `${formatDate(monday)} - ${formatDate(sunday)}`;
+  const getPeriodText = () => {
+    switch (selectedPreset) {
+      case 'today':
+        return 'Hari Ini';
+      case 'week':
+        const today = new Date();
+        const day = today.getDay();
+        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+        const monday = new Date(today.setDate(diff));
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        const formatDate = (date: Date) => `${date.getDate()}/${date.getMonth() + 1}`;
+        return `${formatDate(monday)} - ${formatDate(sunday)}`;
+      case 'month':
+        const currentMonth = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+        return currentMonth;
+      case 'year':
+        return new Date().getFullYear().toString();
+      default:
+        return '';
+    }
+  };
+
+  const getChartWidth = () => {
+    const baseWidth = width - 100;
+    // Adjust spacing based on number of data points
+    return baseWidth;
+  };
+
+  const getSpacing = () => {
+    const baseWidth = width - 100;
+    const dataPoints = chartData.length;
+    return baseWidth / dataPoints;
   };
 
   return (
@@ -51,18 +109,17 @@ export const DashboardChart: React.FC<DashboardChartProps> = ({ data, isLoading 
       </View>
 
       <View style={styles.chartWrapper}>
-        {/* Gunakan minHeight agar layout tidak goyang saat transisi data */}
         <View style={{ height: 200, width: '100%', justifyContent: 'center' }}>
           {hasValidData ? (
             <LineChart
               areaChart
               curved
               data={chartData}
-              width={width - 100}
+              width={getChartWidth()}
               height={180}
               hideDataPoints={false}
               dataPointsColor={COLORS.primary}
-              spacing={(width - 100) / 7}
+              spacing={getSpacing()}
               color={COLORS.primary}
               thickness={3}
               startFillColor="rgba(20, 158, 136, 0.3)"
@@ -73,7 +130,6 @@ export const DashboardChart: React.FC<DashboardChartProps> = ({ data, isLoading 
               xAxisColor="#E5E7EB"
               hideYAxisText
               disableScroll
-              // Animasi dimatikan sedikit agar tidak terasa berat saat ganti filter cepat
               animateOnDataChange={true} 
               animationDuration={500}
               pointerConfig={{
@@ -114,7 +170,7 @@ export const DashboardChart: React.FC<DashboardChartProps> = ({ data, isLoading 
       </View>
 
       <View style={styles.weekRangeContainer}>
-        <Text style={styles.weekRangeText}>Periode: {getWeekRange()}</Text>
+        <Text style={styles.weekRangeText}>Periode: {getPeriodText()}</Text>
       </View>
     </View>
   );
@@ -210,39 +266,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: 'PoppinsBold',
     marginBottom: 2,
-  },
-  tooltipPercent: {
-    color: COLORS.primary,
-    fontSize: 10,
-    fontFamily: 'PoppinsMedium',
-    marginTop: 2,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    marginTop: 20,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: '#E5E7EB',
-    marginHorizontal: 16,
-  },
-  statLabel: {
-    fontSize: 11,
-    fontFamily: 'PoppinsRegular',
-    color: COLORS.textLight,
-    marginBottom: 4,
-  },
-  statValue: {
-    fontSize: 13,
-    fontFamily: 'PoppinsSemiBold',
-    color: COLORS.textDark,
   },
   emptyChart: {
     height: 180,
