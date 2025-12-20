@@ -1,23 +1,11 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  StatusBar,
-  Modal,
-  Animated,
-  TouchableWithoutFeedback,
-  Dimensions,
-  KeyboardAvoidingView,
-  Platform,
+  View, Text, StyleSheet, ScrollView, StatusBar, Modal, Animated,
+  TouchableWithoutFeedback, Dimensions, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
 
-// Constants & Hooks
 import { COLORS } from '../../../constants/colors';
 import { useProductForm } from '../../../hooks/useProductForm';
-
-// Components
 import { ProductFormHeader } from '../../../components/addproduct/ProductFormHeader';
 import { ProductFormFields } from '../../../components/addproduct/ProductFormFields';
 import { SubmitButton } from '../../../components/addproduct/SubmitButton';
@@ -26,19 +14,13 @@ import BarcodeScannerScreen from '../BarcodeScannerScreen';
 const { height } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = height * 0.85;
 
-// Interface untuk Props agar tidak ada error TypeScript "implicitly any"
 interface AddProductModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
-const AddProductModal: React.FC<AddProductModalProps> = ({
-  visible,
-  onClose,
-  onSuccess,
-}) => {
-  // --- Animation Logic ---
+const AddProductModal: React.FC<AddProductModalProps> = ({ visible, onClose, onSuccess }) => {
   const slideAnim = useRef(new Animated.Value(height)).current;
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -59,55 +41,50 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
     }
   }, [slideAnim]);
 
-  // Efek saat modal dibuka atau ditutup dari props visible
   useEffect(() => {
-    if (visible) {
-      animateModal(0);
-    } else {
-      slideAnim.setValue(height);
-    }
+    if (visible) animateModal(0);
+    else slideAnim.setValue(height);
   }, [visible, animateModal, slideAnim]);
 
-  // --- Form Logic dari Hook ---
   const {
-    formData,
-    loading,
-    showScanner,
-    imageUri, // State URI lokal untuk preview
-    updateField,
-    generateBarcode,
-    handleBarcodeScanned,
-    handleSubmit,
-    setShowScanner,
-    pickImage,
-    removeImage,
-    resetForm
+    formData, loading, showScanner, imageUri,
+    updateField, generateBarcode, handleBarcodeScanned,
+    handleSubmit, setShowScanner, pickImage, removeImage, resetForm
   } = useProductForm(() => {
-    // Callback ketika sukses simpan
     if (onSuccess) onSuccess();
     handleClose();
   });
 
   const handleClose = useCallback(() => {
     animateModal(height, () => {
-      resetForm(); // Reset data form saat modal ditutup
+      resetForm();
       onClose();
     });
   }, [onClose, animateModal, resetForm]);
 
-  const handleFieldFocus = (fieldY: number) => {
-    scrollViewRef.current?.scrollTo({
-      y: fieldY - 60,
-      animated: true,
-    });
+  // FUNGSI BARU: Menampilkan pilihan tipe barcode
+  const onAutoGeneratePress = () => {
+    Alert.alert(
+      "Opsi Generate Barcode",
+      "Pilih standar barcode yang diinginkan:",
+      [
+        { 
+          text: "EAN-13 (Ritel Standar)", 
+          onPress: () => generateBarcode('EAN13') 
+        },
+        { 
+          text: "CODE-128 (Internal Toko)", 
+          onPress: () => generateBarcode('CODE128') 
+        },
+        { text: "Batal", style: "cancel" }
+      ]
+    );
   };
 
   return (
     <Modal transparent visible={visible} animationType="none">
       <StatusBar translucent backgroundColor="rgba(0,0,0,0.5)" barStyle="light-content" />
-
       <View style={styles.overlay}>
-        {/* Backdrop clickable untuk menutup modal */}
         <TouchableWithoutFeedback onPress={handleClose}>
           <View style={styles.backdrop} />
         </TouchableWithoutFeedback>
@@ -119,13 +96,9 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
           <Animated.View
             style={[
               styles.modalContainer,
-              {
-                maxHeight: MAX_MODAL_HEIGHT,
-                transform: [{ translateY: slideAnim }],
-              },
+              { maxHeight: MAX_MODAL_HEIGHT, transform: [{ translateY: slideAnim }] },
             ]}
           >
-            {/* Header Biru Modal */}
             <ProductFormHeader onClose={handleClose} isModal />
 
             <View style={styles.contentWrapper}>
@@ -135,7 +108,6 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-                {/* Input Fields Produk */}
                 <ProductFormFields
                   name={formData.name}
                   price={formData.price}
@@ -144,7 +116,7 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
                   category={formData.category}
                   stock={formData.stock}
                   barcode={formData.barcode}
-                  imageUri={imageUri} // Menggunakan imageUri dari hook
+                  imageUri={imageUri}
                   onChangeName={(v) => updateField('name', v)}
                   onChangePrice={(v) => updateField('price', v)}
                   onChangePurchasePrice={(v) => updateField('purchasePrice', v)}
@@ -155,23 +127,20 @@ const AddProductModal: React.FC<AddProductModalProps> = ({
                   onPickImage={pickImage}
                   onRemoveImage={removeImage}
                   onScanPress={() => setShowScanner(true)}
-                  onAutoGeneratePress={generateBarcode}
-                  onFieldFocus={handleFieldFocus}
+                  onAutoGeneratePress={onAutoGeneratePress} // Menggunakan fungsi pilihan
+                  onFieldFocus={(fieldY) => {
+                    scrollViewRef.current?.scrollTo({ y: fieldY - 60, animated: true });
+                  }}
                 />
 
-                {/* Tombol Submit dengan Loading State */}
-                <SubmitButton 
-                  loading={loading} 
-                  onPress={handleSubmit} 
-                />
+                <SubmitButton loading={loading} onPress={handleSubmit} />
 
                 <Text style={styles.infoFooter}>
-                  Pastikan kategori, harga beli, dan pemasok diisi agar laporan laba akurat.
+                  Gunakan EAN-13 untuk produk umum agar kompatibel dengan sistem lain.
                 </Text>
               </ScrollView>
             </View>
 
-            {/* MODAL SCANNER BARCODE */}
             {showScanner && (
               <BarcodeScannerScreen
                 visible={showScanner}

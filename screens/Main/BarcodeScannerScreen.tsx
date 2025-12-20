@@ -1,12 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Modal,
+  Dimensions,
+  Animated,
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
+import { COLORS } from '../../constants/colors'; // Pastikan path ini benar
+
+const { width } = Dimensions.get('window');
+const SCAN_AREA_SIZE = 250;
 
 interface BarcodeScannerProps {
   visible: boolean;
@@ -21,8 +27,8 @@ const BarcodeScannerScreen: React.FC<BarcodeScannerProps> = ({
 }) => {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [isScanning, setIsScanning] = useState(true);
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
 
-  // Request camera permission
   useEffect(() => {
     (async () => {
       const { status } = await Camera.requestCameraPermissionsAsync();
@@ -30,48 +36,45 @@ const BarcodeScannerScreen: React.FC<BarcodeScannerProps> = ({
     })();
   }, []);
 
-  // Reset scanning when modal opens
   useEffect(() => {
-    if (visible) {
-      setIsScanning(true);
+    if (visible && isScanning) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanLineAnim, {
+            toValue: SCAN_AREA_SIZE - 2,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanLineAnim, {
+            toValue: 0,
+            duration: 2000,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
     }
-  }, [visible]);
+  }, [visible, isScanning]);
 
-  const handleBarcodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (!isScanning) return;
-
     setIsScanning(false);
     onScan(data);
     onClose();
-
-    // Reset scanning after 1 second
-    setTimeout(() => setIsScanning(true), 1000);
+    setTimeout(() => setIsScanning(true), 1500);
   };
 
-  if (hasPermission === null) {
+  if (hasPermission === null || hasPermission === false) {
     return (
-      <Modal visible={visible} animationType="slide">
+      <Modal visible={visible} animationType="fade">
         <View style={styles.permissionContainer}>
           <Text style={styles.permissionText}>
-            Meminta izin kamera...
+            {hasPermission === null ? 'Meminta izin kamera...' : 'Akses Kamera Ditolak'}
           </Text>
-        </View>
-      </Modal>
-    );
-  }
-
-  if (hasPermission === false) {
-    return (
-      <Modal visible={visible} animationType="slide">
-        <View style={styles.permissionContainer}>
-          <Text style={styles.permissionText}>
-            Akses kamera diperlukan untuk scan barcode
-          </Text>
-          <Text style={styles.permissionSubtext}>
-            Silakan berikan izin di pengaturan aplikasi
-          </Text>
-          <TouchableOpacity style={styles.button} onPress={onClose}>
-            <Text style={styles.buttonText}>Tutup</Text>
+          <TouchableOpacity 
+            style={[styles.button, { backgroundColor: COLORS.primary }]} 
+            onPress={onClose}
+          >
+            <Text style={styles.buttonText}>Kembali</Text>
           </TouchableOpacity>
         </View>
       </Modal>
@@ -83,41 +86,43 @@ const BarcodeScannerScreen: React.FC<BarcodeScannerProps> = ({
       <View style={styles.container}>
         <CameraView
           style={StyleSheet.absoluteFill}
-          facing="back"
           onBarcodeScanned={isScanning ? handleBarcodeScanned : undefined}
           barcodeScannerSettings={{
-            barcodeTypes: [
-              'qr',
-              'ean13',
-              'ean8',
-              'code128',
-              'code39',
-              'code93',
-              'upc_a',
-              'upc_e',
-            ],
+            barcodeTypes: ['ean13', 'code128', 'qr'],
           }}
         />
 
-        {/* Overlay */}
         <View style={styles.overlay}>
-          <View style={styles.topOverlay} />
-          <View style={styles.middleOverlay}>
-            <View style={styles.sideOverlay} />
-            <View style={styles.scanArea}>
-              <View style={[styles.corner, styles.topLeft]} />
-              <View style={[styles.corner, styles.topRight]} />
-              <View style={[styles.corner, styles.bottomLeft]} />
-              <View style={[styles.corner, styles.bottomRight]} />
+          <View style={styles.unfocusedContainer} />
+          
+          <View style={styles.middleContainer}>
+            <View style={styles.unfocusedContainer} />
+            <View style={[styles.focusedContainer, { borderColor: COLORS.success }]}>
+              {/* Garis pemindai menggunakan warna success dari konstanta */}
+              <Animated.View 
+                style={[
+                  styles.scanLine, 
+                  { backgroundColor: COLORS.success, transform: [{ translateY: scanLineAnim }] }
+                ]} 
+              />
+              
+              <View style={[styles.corner, styles.topLeft, { borderColor: COLORS.success }]} />
+              <View style={[styles.corner, styles.topRight, { borderColor: COLORS.success }]} />
+              <View style={[styles.corner, styles.bottomLeft, { borderColor: COLORS.success }]} />
+              <View style={[styles.corner, styles.bottomRight, { borderColor: COLORS.success }]} />
             </View>
-            <View style={styles.sideOverlay} />
+            <View style={styles.unfocusedContainer} />
           </View>
-          <View style={styles.bottomOverlay}>
-            <Text style={styles.instructionText}>
-              Arahkan kamera ke barcode produk
+
+          <View style={styles.bottomContainer}>
+            <Text style={[styles.instructionText, { color: COLORS.white }]}>
+              Arahkan ke Barcode / QR Code
             </Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-              <Text style={styles.closeButtonText}>Tutup</Text>
+            <TouchableOpacity 
+              style={[styles.cancelButton, { borderColor: COLORS.white }]} 
+              onPress={onClose}
+            >
+              <Text style={[styles.cancelButtonText, { color: COLORS.white }]}>Batalkan</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -127,117 +132,36 @@ const BarcodeScannerScreen: React.FC<BarcodeScannerProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#000',
+  container: { flex: 1, backgroundColor: '#000' },
+  permissionContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    backgroundColor: COLORS.background, // Pakai background konstanta
+    padding: 20 
   },
-  permissionContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#FFF',
+  permissionText: { 
+    fontSize: 18, 
+    fontFamily: 'PoppinsSemiBold', 
+    color: COLORS.textDark, // Pakai textDark konstanta
+    marginBottom: 20 
   },
-  permissionText: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 12,
-    color: '#333',
-  },
-  permissionSubtext: {
-    fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#666',
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'transparent',
-  },
-  topOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  middleOverlay: {
-    flexDirection: 'row',
-    height: 250,
-  },
-  sideOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-  },
-  scanArea: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-    backgroundColor: 'transparent',
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: '#4CAF50',
-  },
-  topLeft: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 4,
-    borderLeftWidth: 4,
-  },
-  topRight: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomLeft: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 4,
-    borderLeftWidth: 4,
-  },
-  bottomRight: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 4,
-    borderRightWidth: 4,
-  },
-  bottomOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  instructionText: {
-    color: '#FFF',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  button: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-  },
-  buttonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  closeButton: {
-    backgroundColor: '#f44336',
-    paddingVertical: 12,
-    paddingHorizontal: 40,
-    borderRadius: 8,
-  },
-  closeButtonText: {
-    color: '#FFF',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  overlay: { flex: 1 },
+  unfocusedContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
+  middleContainer: { flexDirection: 'row', height: SCAN_AREA_SIZE },
+  focusedContainer: { width: SCAN_AREA_SIZE, height: SCAN_AREA_SIZE, position: 'relative' },
+  scanLine: { width: '100%', height: 2, position: 'absolute' },
+  corner: { position: 'absolute', width: 40, height: 40 },
+  topLeft: { top: 0, left: 0, borderTopWidth: 5, borderLeftWidth: 5, borderTopLeftRadius: 15 },
+  topRight: { top: 0, right: 0, borderTopWidth: 5, borderRightWidth: 5, borderTopRightRadius: 15 },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 5, borderLeftWidth: 5, borderBottomLeftRadius: 15 },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 5, borderRightWidth: 5, borderBottomRightRadius: 15 },
+  bottomContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', paddingTop: 40 },
+  instructionText: { fontSize: 15, fontFamily: 'PoppinsMedium', marginBottom: 30 },
+  button: { paddingVertical: 12, paddingHorizontal: 40, borderRadius: 12 },
+  buttonText: { color: COLORS.white, fontFamily: 'PoppinsSemiBold' },
+  cancelButton: { paddingVertical: 12, paddingHorizontal: 50, borderRadius: 30, borderWidth: 1 },
+  cancelButtonText: { fontSize: 14, fontFamily: 'PoppinsSemiBold' },
 });
 
-export default BarcodeScannerScreen
+export default BarcodeScannerScreen;

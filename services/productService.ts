@@ -15,14 +15,42 @@ const UPLOAD_PRESET = 'expo_products';
 
 export class ProductService {
   /**
-   * Generate Barcode Unik (15 digit)
+   * Generate Barcode Berdasarkan Tipe
+   * @param type 'EAN13' | 'CODE128'
    */
-  static generateUniqueBarcode(): string {
-    const timestamp = new Date().getTime().toString();
-    const random = Math.floor(Math.random() * 1000000)
-      .toString()
-      .padStart(6, '0');
-    return (timestamp + random).substring(0, 15);
+  static generateUniqueBarcode(type: 'EAN13' | 'CODE128'): string {
+    const now = new Date();
+    const timestamp = now.getTime().toString(); // Contoh: 1712345678901
+
+    if (type === 'EAN13') {
+      /**
+       * EAN-13 butuh 12 digit angka + 1 digit checksum
+       * Kita ambil 12 digit terakhir dari timestamp
+       */
+      const baseCode = timestamp.substring(timestamp.length - 12);
+      return this.calculateEAN13(baseCode);
+    } else {
+      /**
+       * CODE-128: Menggunakan logika 15 digit Anda yang lama
+       */
+      const random = Math.floor(Math.random() * 1000000)
+        .toString()
+        .padStart(6, '0');
+      return (timestamp + random).substring(0, 15);
+    }
+  }
+
+  /**
+   * Logika Perhitungan Checksum EAN-13
+   */
+  private static calculateEAN13(code: string): string {
+    let sum = 0;
+    for (let i = 0; i < 12; i++) {
+      // Posisi ganjil kali 1, posisi genap kali 3
+      sum += parseInt(code[i]) * (i % 2 === 0 ? 1 : 3);
+    }
+    const checksum = (10 - (sum % 10)) % 10;
+    return code + checksum;
   }
 
   /**
@@ -92,14 +120,12 @@ export class ProductService {
   }
 
   /**
-   * Add Product (Menerima 1 argumen ProductFormData yang sudah berisi imageUrl)
+   * Add Product
    */
   static async addProduct(data: ProductFormData): Promise<void> {
-    // 1. Validasi Internal
     const validation = this.validateProduct(data);
     if (!validation.isValid) throw new Error(validation.error);
 
-    // 2. Cek Duplikat
     const isDuplicate = await this.checkBarcodeExists(data.barcode);
     if (isDuplicate) throw new Error('Barcode ini sudah terdaftar.');
 
@@ -115,6 +141,8 @@ export class ProductService {
         category: data.category?.trim() || 'Tanpa Kategori',
         stock: parseInt(data.stock),
         barcode: data.barcode.trim(),
+        // Simpan tipe barcode agar saat cetak label tidak salah format
+        barcodeType: data.barcode.length === 13 ? 'EAN13' : 'CODE128', 
         imageUrl: data.imageUrl, 
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

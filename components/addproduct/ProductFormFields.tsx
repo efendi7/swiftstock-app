@@ -155,8 +155,10 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
         <HandCoins size={16} color="#fff" />
         <Text style={styles.btnText}>AUTO</Text>
       </TouchableOpacity>
-    </View>
+    </View>   
   </View>
+
+  
 );
 
 const styles = StyleSheet.create({
