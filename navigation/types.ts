@@ -1,8 +1,10 @@
+import { NavigatorScreenParams } from '@react-navigation/native';
+
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  AdminTabs: undefined;
-  CashierTabs: undefined; 
+  AdminTabs: NavigatorScreenParams<AdminTabParamList>; // Links the Tab types
+  CashierTabs: NavigatorScreenParams<CashierTabParamList>; // Links the Tab types
   Cashier: undefined;     
 };
 
@@ -13,7 +15,6 @@ export type AdminTabParamList = {
   Profile: undefined;
 };
 
-// TAMBAHKAN PRODUCT DI SINI
 export type CashierTabParamList = {
   CashierDashboard: undefined;
   Product: undefined;

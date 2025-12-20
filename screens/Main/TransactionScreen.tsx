@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StatusBar, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StatusBar, StyleSheet, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore'; // Tambahkan 'where'
-import { db, auth } from '../../services/firebaseConfig'; // Tambahkan 'auth'
+import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { History, BarChart3 } from 'lucide-react-native';
+
+import { db, auth } from '../../services/firebaseConfig';
+import { ScreenHeader } from '../../components/common/ScreenHeader';
 import { TransactionSearchBar, TransactionFilterSection, TransactionList } from '../../components/transactions';
 import { FilterMode, SortType, Transaction } from '../../types/transaction.type';
+import { COLORS } from '../../constants/colors';
 
 const TransactionScreen = () => {
   const insets = useSafeAreaInsets();
@@ -13,16 +16,16 @@ const TransactionScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  
+  const currentUser = auth.currentUser;
 
   const [searchInput, setSearchInput] = useState('');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [selectedSort, setSelectedSort] = useState<SortType>('latest');
-
-  const currentYear = new Date().getFullYear();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
-  const [selectedYear, setSelectedYear] = useState(currentYear);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
-  // LOGIKA DETEKSI ROLE (Admin/Kasir)
+  // Detect Role
   useEffect(() => {
     const checkRole = async () => {
       const user = auth.currentUser;
@@ -34,7 +37,7 @@ const TransactionScreen = () => {
     checkRole();
   }, []);
 
-  // FETCH DATA DENGAN FILTER ROLE
+  // Fetch Transactions with Role Filter
   const loadTransactions = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -45,37 +48,31 @@ const TransactionScreen = () => {
       const transactionsRef = collection(db, 'transactions');
 
       if (isAdmin) {
-        // Jika ADMIN: Ambil semua transaksi
         q = query(transactionsRef, orderBy('createdAt', 'desc'));
       } else {
-        // Jika KASIR: Hanya ambil transaksi miliknya sendiri berdasarkan cashierId
         q = query(
-          transactionsRef,
-          where('cashierId', '==', user.uid),
+          transactionsRef, 
+          where('cashierId', '==', user.uid), 
           orderBy('createdAt', 'desc')
         );
       }
 
       const snapshot = await getDocs(q);
-      const transactionsList: Transaction[] = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      } as Transaction));
-      
-      setTransactions(transactionsList);
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
+      setTransactions(list);
     } catch (error) {
       console.error('Error loading transactions:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [isAdmin]); // Re-run ketika status isAdmin berubah
+  }, [isAdmin]);
 
   useEffect(() => {
     loadTransactions();
   }, [loadTransactions]);
 
-  // CLIENT-SIDE FILTERING (Sama seperti sebelumnya)
+  // Search and Sort Logic
   const filteredData = useMemo(() => {
     let filtered = [...transactions];
 
@@ -114,10 +111,15 @@ const TransactionScreen = () => {
     return filtered;
   }, [transactions, searchInput, filterMode, selectedSort, selectedMonth, selectedYear]);
 
+  // Dynamic Header Configuration
+  const userName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User';
+  const headerTitle = isAdmin ? `Semua Riwayat\nTransaksi` : `Riwayat Transaksi\nSaya`;
+  const headerIcon = isAdmin ? <BarChart3 size={28} color="#FFF" /> : <History size={28} color="#FFF" />;
+
   if (loading && transactions.length === 0) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#FFF" />
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </View>
     );
   }
@@ -126,10 +128,11 @@ const TransactionScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
       
-      <LinearGradient colors={['#00A79D', '#00D4C8']} style={[styles.header, { paddingTop: insets.top + 20 }]}>
-        <Text style={styles.headerTitle}>{isAdmin ? 'Laporan Penjualan' : 'Riwayat Saya'}</Text>
-        {isAdmin && <Text style={styles.adminText}>Mode Admin</Text>}
-      </LinearGradient>
+      <ScreenHeader 
+        title={headerTitle}
+        subtitle={userName}
+        icon={headerIcon}
+      />
 
       <View style={styles.contentWrapper}>
         <View style={styles.searchContainer}>
@@ -142,10 +145,7 @@ const TransactionScreen = () => {
           selectedMonth={selectedMonth}
           selectedYear={selectedYear}
           transactionCount={filteredData.length}
-          onFilterChange={(mode) => {
-            setFilterMode(mode);
-            if (mode !== 'specificMonth') setSelectedMonth(new Date().getMonth());
-          }}
+          onFilterChange={setFilterMode}
           onSortChange={setSelectedSort}
           onMonthChange={setSelectedMonth}
           onYearChange={setSelectedYear}
@@ -156,7 +156,7 @@ const TransactionScreen = () => {
           searchInput={searchInput}
           isAdmin={isAdmin}
           refetch={loadTransactions}
-          insets={insets}
+          insets={insets} // FIXED: Insets passed here
         />
       </View>
     </View>
@@ -164,11 +164,16 @@ const TransactionScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#00A79D' },
-  header: { paddingHorizontal: 20, paddingBottom: 25 },
-  headerTitle: { fontSize: 24, fontFamily: 'PoppinsBold', color: '#FFF' },
-  adminText: { color: '#E0F2F1', fontSize: 12, fontFamily: 'PoppinsMedium' },
-  contentWrapper: { flex: 1, backgroundColor: '#F8FAFC', borderTopLeftRadius: 25, borderTopRightRadius: 25, overflow: 'hidden' },
+  container: { flex: 1, backgroundColor: COLORS.primary },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  contentWrapper: { 
+    flex: 1, 
+    backgroundColor: '#F8FAFC', 
+    borderTopLeftRadius: 30, 
+    borderTopRightRadius: 30, 
+    marginTop: -20, 
+    overflow: 'hidden' 
+  },
   searchContainer: { padding: 16 }
 });
 
