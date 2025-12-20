@@ -8,10 +8,15 @@ export interface Transaction {
   transactionNumber?: string;
   cashierId: string;
   cashierName?: string;
-  cashierEmail?: string; // Untuk admin view
+  cashierEmail?: string;
   total: number;
-  date?: Timestamp; // Optional - legacy field
-  createdAt: Timestamp; // Primary timestamp untuk filtering
+  
+  // ✅ TAMBAHKAN DUA PROPERTI INI
+  cashAmount?: number;   // Jumlah uang tunai yang diterima dari pelanggan
+  changeAmount?: number; // Jumlah uang kembalian yang diberikan
+  
+  date?: Timestamp; 
+  createdAt: Timestamp; 
   items: TransactionItem[];
 }
 
