@@ -135,28 +135,28 @@ const TransactionScreen = () => {
       />
 
       <View style={styles.contentWrapper}>
-        <View style={styles.searchContainer}>
+        <View style={styles.filterSearchContainer}>
           <TransactionSearchBar value={searchInput} onChangeText={setSearchInput} isAdmin={isAdmin} />
+          
+          <TransactionFilterSection
+            filterMode={filterMode}
+            selectedSort={selectedSort}
+            selectedMonth={selectedMonth}
+            selectedYear={selectedYear}
+            transactionCount={filteredData.length}
+            onFilterChange={setFilterMode}
+            onSortChange={setSelectedSort}
+            onMonthChange={setSelectedMonth}
+            onYearChange={setSelectedYear}
+          />
         </View>
-
-        <TransactionFilterSection
-          filterMode={filterMode}
-          selectedSort={selectedSort}
-          selectedMonth={selectedMonth}
-          selectedYear={selectedYear}
-          transactionCount={filteredData.length}
-          onFilterChange={setFilterMode}
-          onSortChange={setSelectedSort}
-          onMonthChange={setSelectedMonth}
-          onYearChange={setSelectedYear}
-        />
 
         <TransactionList
           transactions={filteredData}
           searchInput={searchInput}
           isAdmin={isAdmin}
           refetch={loadTransactions}
-          insets={insets} // FIXED: Insets passed here
+          insets={insets}
         />
       </View>
     </View>
@@ -174,7 +174,10 @@ const styles = StyleSheet.create({
     marginTop: -20, 
     overflow: 'hidden' 
   },
-  searchContainer: { padding: 16 }
+  filterSearchContainer: { 
+    padding: 16,
+    paddingBottom: 0
+  }
 });
 
 export default TransactionScreen;

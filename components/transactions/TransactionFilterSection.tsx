@@ -40,7 +40,7 @@ const TransactionFilterSection: React.FC<Props> = ({
         activeOpacity={0.7}
       >
         <View style={styles.toggleLeft}>
-          <Filter size={18} color={COLORS.primary} />
+          <Filter size={18} color={COLORS.secondary} />
           <Text style={styles.toggleText}>Filter & Urutkan</Text>
         </View>
 
@@ -61,13 +61,13 @@ const TransactionFilterSection: React.FC<Props> = ({
           <View style={styles.row}>
             <FilterButton
               label="Hari Ini"
-              icon={<Clock size={16} />}
+            
               active={filterMode === 'today'}
               onPress={() => onFilterChange('today')}
             />
             <FilterButton
               label="Pilih Bulan"
-              icon={<Calendar size={16} />}
+             
               active={filterMode === 'specificMonth'}
               onPress={() => onFilterChange('specificMonth')}
             />
@@ -86,7 +86,7 @@ const TransactionFilterSection: React.FC<Props> = ({
           </Collapsible>
 
           {/* SORT */}
-          <Text style={styles.sectionLabel}>Urutkan</Text>
+          
           <View style={styles.row}>
             <SortButton
               label="Terbaru"
@@ -107,9 +107,12 @@ const TransactionFilterSection: React.FC<Props> = ({
 
 /* ================= BUTTONS ================= */
 
+/* ================= BUTTONS ================= */
+
 const FilterButton = ({ label, icon, active, onPress }: any) => (
   <TouchableOpacity
-    style={[styles.filterBtn, active && styles.activePrimary]}
+    // DIUBAH: Gunakan activeSecondary agar sama dengan tombol Sort (Terbaru)
+    style={[styles.filterBtn, active && styles.activeSecondary]} 
     onPress={onPress}
     activeOpacity={0.7}
   >
@@ -122,6 +125,7 @@ const FilterButton = ({ label, icon, active, onPress }: any) => (
 
 const SortButton = ({ label, active, onPress }: any) => (
   <TouchableOpacity
+    // Tetap gunakan activeSecondary
     style={[styles.sortBtn, active && styles.activeSecondary]}
     onPress={onPress}
     activeOpacity={0.7}
@@ -131,7 +135,6 @@ const SortButton = ({ label, active, onPress }: any) => (
     </Text>
   </TouchableOpacity>
 );
-
 /* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
