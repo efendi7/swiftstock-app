@@ -7,7 +7,18 @@ import {
   increment 
 } from 'firebase/firestore';
 
-export const handleCheckoutProcess = async (cartItems: any[], total: number, user: any) => {
+/**
+ * Fungsi untuk menangani proses checkout transaksi
+ * Menerima 5 argumen untuk mendukung pencatatan uang tunai dan metode pembayaran
+ */
+export const handleCheckoutProcess = async (
+  cartItems: any[], 
+  total: number, 
+  user: any,
+  cashAmount: number,   // Tambahan argumen ke-4
+  changeAmount: number, // Tambahan argumen ke-5
+  paymentMethod: 'cash' | 'qris' = 'cash' // Tambahan opsional untuk logging
+) => {
   try {
     return await runTransaction(db, async (transaction) => {
       // 1. Validasi Stok & Dapatkan Data Terbaru secara Atomik
@@ -51,6 +62,9 @@ export const handleCheckoutProcess = async (cartItems: any[], total: number, use
         cashierName: user.displayName || user.email?.split('@')[0] || 'Kasir',
         cashierEmail: user.email,
         total: total,
+        cashAmount: cashAmount,     // Menyimpan uang tunai yang diterima
+        changeAmount: changeAmount, // Menyimpan kembalian
+        paymentMethod: paymentMethod, // Menyimpan metode (cash/qris)
         date: serverTimestamp(),
         createdAt: serverTimestamp(),
         items: cartItems.map(item => ({

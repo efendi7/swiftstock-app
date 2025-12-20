@@ -7,7 +7,7 @@ import {
   Package,
   BarChart2,
   User,
-  PlusCircle,
+  PackagePlus,
   Scan,
 } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
@@ -78,20 +78,21 @@ export const BottomNavigation: React.FC<Props> = ({
         </TouchableOpacity>
       </View>
 
-      {/* FAB BUTTON DI TENGAH */}
+     {/* FAB BUTTON DI TENGAH */}
       <TouchableOpacity
         style={[styles.fabButton, { bottom: 25 + insets.bottom }]}
         onPress={onFabPress}
         activeOpacity={0.8}
       >
         <LinearGradient
-          colors={isCashierRole ? ['#2196F3', '#1976D2'] : [COLORS.secondary, '#008e85']}
+          
+          colors={[COLORS.secondary, '#008e85']} 
           style={styles.fabGradient}
         >
           {isCashierRole ? (
             <Scan size={30} color="#FFF" />
           ) : (
-            <PlusCircle size={30} color="#FFF" />
+            <PackagePlus size={30} color="#FFF" />
           )}
         </LinearGradient>
       </TouchableOpacity>

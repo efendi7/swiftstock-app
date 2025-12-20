@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput,
-  Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, Modal
+  Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, Modal, Image
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, db } from '../../services/firebaseConfig';
 import { handleCheckoutProcess } from '../../services/transactionService';
 import { 
-  Scan, Trash2, Plus, Minus, CreditCard, PackageOpen, Lightbulb, X 
+  Scan, Trash2, Plus, Minus, CreditCard, PackageOpen, Lightbulb, X, Banknote, QrCode 
 } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
 import { ScreenHeader } from '../../components/common/ScreenHeader';
@@ -27,6 +27,8 @@ interface CartItem extends Product {
   qty: number;
 }
 
+type PaymentMethod = 'cash' | 'qris';
+
 const CashierScreen = () => {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [showScanner, setShowScanner] = useState(false);
@@ -35,25 +37,26 @@ const CashierScreen = () => {
 
   // State untuk Modal Pembayaran
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashAmount, setCashAmount] = useState('');
   const [changeAmount, setChangeAmount] = useState(0);
+
+  const calculateTotal = () => cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 
   const getProductByBarcode = async (barcode: string) => {
     try {
       setLoading(true);
       const q = query(collection(db, 'products'), where('barcode', '==', barcode));
       const snapshot = await getDocs(q);
-      
       if (snapshot.empty) {
-        Alert.alert('Produk Tidak Ada', 'Barcode tidak terdaftar di sistem.');
+        Alert.alert('Produk Tidak Ada', 'Barcode tidak terdaftar.');
         return;
       }
-
       const docSnap = snapshot.docs[0];
       const product = { id: docSnap.id, ...docSnap.data() } as Product;
       addToCart(product);
     } catch (e) {
-      Alert.alert('Error', 'Gagal memindai produk.');
+      Alert.alert('Error', 'Gagal memindai.');
     } finally {
       setLoading(false);
       setShowScanner(false);
@@ -64,13 +67,13 @@ const CashierScreen = () => {
     const exist = cart.find(i => i.id === product.id);
     if (exist) {
       if (exist.qty + 1 > product.stock) {
-        Alert.alert('Stok Terbatas', `Stok ${product.name} tersisa ${product.stock}`);
+        Alert.alert('Stok Terbatas', `Sisa: ${product.stock}`);
         return;
       }
       setCart(cart.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i));
     } else {
       if (product.stock < 1) {
-        Alert.alert('Stok Habis', 'Produk ini tidak tersedia.');
+        Alert.alert('Stok Habis', 'Tidak tersedia.');
         return;
       }
       setCart([...cart, { ...product, qty: 1 }]);
@@ -80,14 +83,12 @@ const CashierScreen = () => {
   const updateQty = (id: string, qty: number) => {
     const item = cart.find(i => i.id === id);
     if (!item) return;
-
     if (qty > item.qty && qty > item.stock) {
-      Alert.alert('Stok Tidak Cukup', `Maksimal pembelian adalah ${item.stock} unit.`);
+      Alert.alert('Stok Tidak Cukup', `Maks: ${item.stock}`);
       return;
     }
-
     if (qty < 1) {
-      Alert.alert('Hapus Produk', `Hapus ${item.name} dari keranjang?`, [
+      Alert.alert('Hapus?', 'Hapus dari keranjang?', [
         { text: 'Batal', style: 'cancel' },
         { text: 'Hapus', style: 'destructive', onPress: () => setCart(cart.filter(i => i.id !== id)) }
       ]);
@@ -96,22 +97,36 @@ const CashierScreen = () => {
     setCart(cart.map(i => i.id === id ? { ...i, qty } : i));
   };
 
-  const calculateTotal = () => cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-
   const handleCashChange = (text: string) => {
     const amount = parseInt(text.replace(/[^0-9]/g, '')) || 0;
     setCashAmount(text);
-    const total = calculateTotal();
-    setChangeAmount(amount - total);
+    setChangeAmount(amount - calculateTotal());
   };
 
+  // ✅ FIXED: Mengirim 5 argumen ke service
   const onCheckout = async () => {
     const user = auth.currentUser;
     if (!user) return;
 
     try {
       setLoading(true);
-      const result = await handleCheckoutProcess(cart, calculateTotal(), user);
+
+      // Konversi input tunai ke number
+      const rawCash = parseInt(cashAmount.replace(/[^0-9]/g, '')) || 0;
+      
+      // Jika QRIS, otomatis uang pas (cash = total, kembalian = 0)
+      const finalCash = paymentMethod === 'qris' ? calculateTotal() : rawCash;
+      const finalChange = paymentMethod === 'qris' ? 0 : changeAmount;
+
+      // Panggil handleCheckoutProcess dengan 5 argumen
+      const result = await handleCheckoutProcess(
+        cart, 
+        calculateTotal(), 
+        user, 
+        finalCash, 
+        finalChange,
+        paymentMethod // Kirim metode pembayaran sebagai argumen ke-6 (opsional di service)
+      );
       
       Alert.alert('Sukses', `Transaksi ${result.transactionNumber} berhasil!`, [
         { text: 'Selesai', onPress: () => {
@@ -119,6 +134,7 @@ const CashierScreen = () => {
           setShowPaymentModal(false);
           setCashAmount('');
           setChangeAmount(0);
+          setPaymentMethod('cash');
         }}
       ]);
     } catch (e: any) {
@@ -126,15 +142,6 @@ const CashierScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const processPayment = async () => {
-    const cash = parseInt(cashAmount.replace(/[^0-9]/g, '')) || 0;
-    if (cash < calculateTotal()) {
-      Alert.alert('Uang Kurang', 'Jumlah uang tunai tidak mencukupi total tagihan.');
-      return;
-    }
-    await onCheckout();
   };
 
   return (
@@ -206,12 +213,10 @@ const CashierScreen = () => {
               onPress={() => setShowPaymentModal(true)}
               disabled={loading}
             >
-              {loading ? <ActivityIndicator color="#FFF" /> : (
-                <View style={styles.btnContent}>
-                  <CreditCard size={20} color="#FFF" />
-                  <Text style={styles.checkoutText}>Bayar Sekarang</Text>
-                </View>
-              )}
+              <View style={styles.btnContent}>
+                <CreditCard size={20} color="#FFF" />
+                <Text style={styles.checkoutText}>Bayar Sekarang</Text>
+              </View>
             </TouchableOpacity>
 
             <View style={styles.tipContainer}>
@@ -230,49 +235,83 @@ const CashierScreen = () => {
       {/* ================= PAYMENT MODAL ================= */}
       <Modal
         visible={showPaymentModal}
-        animationType="fade"
+        animationType="slide"
         transparent={true}
         onRequestClose={() => setShowPaymentModal(false)}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.paymentModalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Pembayaran Tunai</Text>
+              <Text style={styles.modalTitle}>Metode Pembayaran</Text>
               <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
                 <X size={24} color="#64748B" />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalBody}>
+              {/* Tipe Pembayaran Selector */}
+              <View style={styles.methodSelector}>
+                <TouchableOpacity 
+                  style={[styles.methodBtn, paymentMethod === 'cash' && styles.methodBtnActive]}
+                  onPress={() => setPaymentMethod('cash')}
+                >
+                  <Banknote size={20} color={paymentMethod === 'cash' ? '#FFF' : '#64748B'} />
+                  <Text style={[styles.methodText, paymentMethod === 'cash' && styles.methodTextActive]}>Tunai</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.methodBtn, paymentMethod === 'qris' && styles.methodBtnActive]}
+                  onPress={() => setPaymentMethod('qris')}
+                >
+                  <QrCode size={20} color={paymentMethod === 'qris' ? '#FFF' : '#64748B'} />
+                  <Text style={[styles.methodText, paymentMethod === 'qris' && styles.methodTextActive]}>QRIS</Text>
+                </TouchableOpacity>
+              </View>
+
               <Text style={styles.label}>Total Tagihan</Text>
               <Text style={styles.bigTotal}>Rp {calculateTotal().toLocaleString('id-ID')}</Text>
 
-              <View style={styles.inputSection}>
-                <Text style={styles.label}>Uang Diterima (Cash)</Text>
-                <View style={styles.inputContainer}>
-                  <Text style={styles.currencyPrefix}>Rp</Text>
-                  <TextInput
-                    style={styles.cashInput}
-                    keyboardType="numeric"
-                    placeholder="0"
-                    value={cashAmount}
-                    onChangeText={handleCashChange}
-                    autoFocus
-                  />
-                </View>
-              </View>
+              {paymentMethod === 'cash' ? (
+                <>
+                  <View style={styles.inputSection}>
+                    <Text style={styles.label}>Uang Diterima (Cash)</Text>
+                    <View style={styles.inputContainer}>
+                      <Text style={styles.currencyPrefix}>Rp</Text>
+                      <TextInput
+                        style={styles.cashInput}
+                        keyboardType="numeric"
+                        placeholder="0"
+                        value={cashAmount}
+                        onChangeText={handleCashChange}
+                        autoFocus
+                      />
+                    </View>
+                  </View>
 
-              <View style={styles.changeSection}>
-                <Text style={styles.label}>Kembalian</Text>
-                <Text style={[styles.changeValue, changeAmount < 0 && { color: COLORS.danger }]}>
-                  Rp {changeAmount.toLocaleString('id-ID')}
-                </Text>
-              </View>
+                  <View style={styles.changeSection}>
+                    <Text style={styles.label}>Kembalian</Text>
+                    <Text style={[styles.changeValue, changeAmount < 0 && { color: COLORS.danger }]}>
+                      Rp {changeAmount.toLocaleString('id-ID')}
+                    </Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.qrisContainer}>
+                  <Image 
+                    source={require('../../assets/images/qris.png')} // Pastikan file tersedia
+                    style={styles.qrisImage}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.qrisHint}>Pelanggan silakan scan kode di atas</Text>
+                </View>
+              )}
 
               <TouchableOpacity 
-                style={[styles.confirmButton, (changeAmount < 0 || !cashAmount) && styles.disabledBtn]}
-                onPress={processPayment}
-                disabled={changeAmount < 0 || !cashAmount || loading}
+                style={[
+                    styles.confirmButton, 
+                    paymentMethod === 'cash' && (changeAmount < 0 || !cashAmount) && styles.disabledBtn
+                ]}
+                onPress={onCheckout}
+                disabled={loading || (paymentMethod === 'cash' && (changeAmount < 0 || !cashAmount))}
               >
                 {loading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.confirmButtonText}>Konfirmasi Pembayaran</Text>}
               </TouchableOpacity>
@@ -415,6 +454,34 @@ const styles = StyleSheet.create({
   modalBody: {
     padding: 24,
   },
+  methodSelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  methodBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  methodBtnActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  methodText: {
+    fontSize: 14,
+    fontFamily: 'PoppinsSemiBold',
+    color: '#64748B',
+  },
+  methodTextActive: {
+    color: '#FFF',
+  },
   label: {
     fontSize: 12,
     color: '#64748B',
@@ -462,6 +529,23 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontFamily: 'PoppinsBold',
     color: COLORS.secondary,
+  },
+  qrisContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+    padding: 10,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+  },
+  qrisImage: {
+    width: 200,
+    height: 200,
+  },
+  qrisHint: {
+    marginTop: 10,
+    fontSize: 12,
+    fontFamily: 'PoppinsMedium',
+    color: '#64748B',
   },
   confirmButton: {
     backgroundColor: COLORS.secondary,
