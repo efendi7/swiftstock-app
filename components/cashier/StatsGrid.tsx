@@ -11,11 +11,11 @@ const CARD_WIDTH = (width - PADDING_SCREEN - GAP) / 2;
 
 interface StatsGridProps {
   totalProducts: number;
-  outToday: number;
+  totalOut: number;
 }
 
 export const StatsGrid: React.FC<StatsGridProps> = React.memo(
-  ({ totalProducts, outToday }) => {
+  ({ totalProducts, totalOut }) => {
     return (
       <View style={styles.container}>
         <View style={styles.headerTitle}>
@@ -41,8 +41,8 @@ export const StatsGrid: React.FC<StatsGridProps> = React.memo(
                <ArrowUpRight size={16} color="#ef4444" />
             </View>
             <View style={styles.textContainer}>
-              <Text style={styles.statValue}>{outToday}</Text>
-              <Text style={styles.statLabel}>Stok Keluar Hari Ini</Text>
+              <Text style={styles.statValue}>{totalOut}</Text>
+              <Text style={styles.statLabel}>Total Stok Keluar</Text>
             </View>
           </View>
         </View>
@@ -60,20 +60,29 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', 
     width: '100%' 
   },
-  statCard: {
-    backgroundColor: '#FFF',
-    width: CARD_WIDTH,
-    height: 75,
-    borderRadius: 15,
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-  },
+ statCard: {
+  backgroundColor: '#FFF',
+  width: CARD_WIDTH,
+  height: 65,
+  borderRadius: 12,
+  paddingHorizontal: 8,
+  paddingVertical: 8,
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  
+  // SOLUSI KEDIP: Gunakan border tipis + shadow ringan
+  borderWidth: 1,
+  borderColor: '#F0F0F0', 
+  
+  // Shadow untuk iOS
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 1 },
+  shadowOpacity: 0.05,
+  shadowRadius: 2,
+  
+  // Elevation rendah untuk Android agar tidak flicker
+  elevation: 2, 
+},
   iconCircle: {
     width: 32,
     height: 32,
