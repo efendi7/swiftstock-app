@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductService } from '../services/productService';
@@ -20,27 +20,29 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [initialStock, setInitialStock] = useState(0);
 
-  const updateField = (field: keyof ProductFormData, value: string) => {
+  const updateField = useCallback((field: keyof ProductFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  }, []);
 
-  // Set initial data untuk mode edit
-  const setInitialData = (data: ProductFormData, existingImageUri: string | null) => {
+  /**
+   * PERBAIKAN UTAMA: Menggunakan useCallback 
+   * Ini mencegah loop render saat dipanggil di useEffect EditProductModal
+   */
+  const setInitialData = useCallback((data: ProductFormData, existingImageUri: string | null) => {
     setFormData(data);
     setImageUri(existingImageUri);
     setInitialStock(parseInt(data.stock) || 0);
-  };
+  }, []);
 
-  // Generate barcode dengan tipe EAN13 atau CODE128
-  const generateBarcode = (type: 'EAN13' | 'CODE128') => {
+  const generateBarcode = useCallback((type: 'EAN13' | 'CODE128') => {
     const newBarcode = ProductService.generateUniqueBarcode(type);
     updateField('barcode', newBarcode);
-  };
+  }, [updateField]);
 
-  const handleBarcodeScanned = (data: string) => {
+  const handleBarcodeScanned = useCallback((data: string) => {
     updateField('barcode', data);
     setShowScanner(false);
-  };
+  }, [updateField]);
 
   const pickImage = async () => {
     try {
@@ -71,12 +73,12 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
     }
   };
 
-  const removeImage = () => {
+  const removeImage = useCallback(() => {
     setImageUri(null);
-    updateField('imageUrl', '');
-  };
+    setFormData(prev => ({ ...prev, imageUrl: '' }));
+  }, []);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       name: '', 
       price: '', 
@@ -89,23 +91,22 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
     });
     setImageUri(null);
     setInitialStock(0);
-  };
+  }, []);
 
   const handleSubmit = async () => {
+    if (loading) return;
     setLoading(true);
     try {
       let finalData = { ...formData };
       
-      // Upload gambar baru jika ada perubahan
+      // Upload gambar baru jika ada perubahan (uri lokal/file)
       if (imageUri && !imageUri.startsWith('http')) {
         const uploadedUrl = await ProductService.uploadImage(imageUri);
         finalData.imageUrl = uploadedUrl;
-      } else if (imageUri) {
-        // Gunakan URL yang sudah ada
-        finalData.imageUrl = imageUri;
+      } else {
+        finalData.imageUrl = imageUri || '';
       }
       
-      // Mode edit atau tambah
       if (productId) {
         await ProductService.updateProduct(productId, finalData, initialStock);
         Alert.alert('Berhasil', 'Produk berhasil diperbarui');
