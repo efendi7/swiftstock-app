@@ -1,9 +1,9 @@
 import { updateProfile, User } from 'firebase/auth';
-import { doc, updateDoc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 
 const CLOUD_NAME = 'dlkrdbabo'; 
-const UPLOAD_PRESET = 'expo_products'; // Sesuaikan jika ada preset khusus profil
+const UPLOAD_PRESET = 'expo_products';
 
 export interface UserProfileData {
   displayName: string;
@@ -27,7 +27,7 @@ export class ProfileService {
       } as any);
       
       formData.append('upload_preset', UPLOAD_PRESET);
-      formData.append('folder', 'avatars'); // Simpan di folder khusus avatar
+      formData.append('folder', 'avatars');
 
       const response = await fetch(
         `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
@@ -47,6 +47,7 @@ export class ProfileService {
 
   /**
    * Update Profil (Auth & Firestore)
+   * ✅ KONSISTEN: Menggunakan displayName di semua tempat
    */
   static async updateFullProfile(user: User, data: UserProfileData): Promise<void> {
     try {
@@ -56,12 +57,12 @@ export class ProfileService {
         photoURL: data.photoURL
       });
 
-      // 2. Update/Sync ke Firestore 'users' collection (untuk pencatatan data tambahan)
+      // 2. Update/Sync ke Firestore 'users' collection
       const userRef = doc(db, 'users', user.uid);
       await setDoc(userRef, {
         uid: user.uid,
         email: user.email,
-        displayName: data.displayName,
+        displayName: data.displayName, // ✅ GUNAKAN displayName
         photoURL: data.photoURL || null,
         phoneNumber: data.phoneNumber || null,
         updatedAt: serverTimestamp()
@@ -80,5 +81,39 @@ export class ProfileService {
     const userRef = doc(db, 'users', uid);
     const snap = await getDoc(userRef);
     return snap.exists() ? snap.data() : null;
+  }
+
+  /**
+   * ✅ HELPER: Sinkronisasi displayName dari Auth ke Firestore
+   * Dipanggil saat login atau registrasi untuk memastikan konsistensi
+   */
+  static async syncAuthToFirestore(user: User): Promise<void> {
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const userSnap = await getDoc(userRef);
+      
+      // Jika user belum ada di Firestore, buat dokumen baru
+      if (!userSnap.exists()) {
+        await setDoc(userRef, {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || 'Pengguna',
+          photoURL: user.photoURL || null,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Jika sudah ada, pastikan displayName tersinkron
+        const userData = userSnap.data();
+        if (!userData.displayName && user.displayName) {
+          await setDoc(userRef, {
+            displayName: user.displayName,
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+        }
+      }
+    } catch (error) {
+      console.error("Sync Auth to Firestore Error:", error);
+    }
   }
 }

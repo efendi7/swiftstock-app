@@ -52,18 +52,29 @@ export class DashboardService {
       // --- 1. DATA PRODUK (STOK & RANKING STOK) ---
       const productsSnap = await getDocs(collection(db, 'products'));
       let lowStockCount = 0;
-      const stockRanking: ProductStat[] = [];
+      let rawStockRanking: ProductStat[] = [];
 
       productsSnap.forEach((doc) => {
         const data = doc.data();
-        const stock = Number(data.stock || 0);
-        if (stock < 10) lowStockCount++;
-        stockRanking.push({
+        
+        // PERBAIKAN: Paksa nilai stok menjadi Number untuk menghindari kesalahan sort string
+        // Jika data.stock adalah "2" dan "10", tanpa Number() sort akan salah (string-based)
+        const stockValue = Number(data.stock || 0);
+        
+        if (stockValue < 10) lowStockCount++;
+        
+        rawStockRanking.push({
           id: doc.id,
           name: data.name || 'Tanpa Nama',
-          value: stock,
+          value: stockValue,
         });
       });
+
+      // LOGIKA: Urutkan dari stok TERKECIL ke terbesar (Ascending)
+      // Ini memastikan produk yang stoknya 0, 1, 2 berada di posisi paling atas
+      const stockRanking = rawStockRanking
+        .sort((a, b) => a.value - b.value)
+        .slice(0, 10);
 
       // --- 2. DATA TRANSAKSI ---
       const transactionsQuery = query(
@@ -74,7 +85,7 @@ export class DashboardService {
       const transactionsSnap = await getDocs(transactionsQuery);
 
       let totalRevenue = 0;
-      let totalOut = 0;
+      let totalOut = 0; // Total unit barang terjual
       const salesMap = new Map<string, { name: string; qty: number }>();
       const chartDataMap = this.generateChartDataMap(preset);
 
@@ -107,11 +118,12 @@ export class DashboardService {
         }
       });
 
+      // LOGIKA: Urutkan penjualan terbanyak ke terkecil (Descending)
       const salesRanking: ProductStat[] = Array.from(salesMap, ([id, info]) => ({
         id,
         name: info.name,
         value: info.qty,
-      }));
+      })).sort((a, b) => b.value - a.value).slice(0, 10);
 
       // --- 3. DATA PENGELUARAN ---
       const expenseQuery = query(

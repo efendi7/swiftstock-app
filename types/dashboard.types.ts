@@ -24,8 +24,11 @@ export interface DashboardStats {
   lowStockCount: number;
   totalIn: number;
   totalOut: number;
-  weeklyData: ChartDataPoint[]; // Menggunakan interface di atas
-  dateRange?: DateRange;        // Menggunakan interface di atas
+  weeklyData: ChartDataPoint[];
+  dateRange?: DateRange;
   stockRanking: ProductStat[];
   salesRanking: ProductStat[];
+  // TAMBAHKAN DUA BARIS INI:
+  userName?: string;    // Properti nama user
+  photoURL?: string | null; // Properti foto user
 }

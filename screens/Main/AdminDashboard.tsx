@@ -13,8 +13,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { X } from 'lucide-react-native'; // Tambah import X
+import { X } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
+
+// Import Firebase Auth untuk sinkronisasi profil real-time
+import { auth } from '../../services/firebaseConfig';
 import { useDashboard } from '../../hooks/useDashboard';
 
 // Components
@@ -28,19 +31,44 @@ import { RecentActivityCard } from '../../components/dashboard/RecentActivityCar
 const AdminDashboard = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const { loading, stats, activities, selectedPreset, refreshData, setPresetRange } = useDashboard();
+  
+  const { 
+    loading, 
+    stats, 
+    activities, 
+    selectedPreset, 
+    refreshData, 
+    setPresetRange 
+  } = useDashboard();
+  
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false); // State Modal
+  const [modalVisible, setModalVisible] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
+
+  // State lokal untuk nama agar reaktif terhadap perubahan di profil
+  const [currentDisplayName, setCurrentDisplayName] = useState(
+    auth.currentUser?.displayName || stats.userName || 'User Swiftstock'
+  );
 
   const HEADER_MAX_HEIGHT = 230 + insets.top;
   const HEADER_MIN_HEIGHT = 70 + insets.top;
 
-  useFocusEffect(useCallback(() => { refreshData(); }, [refreshData]));
+  // Update nama setiap kali layar kembali difokuskan
+  useFocusEffect(
+    useCallback(() => { 
+      refreshData(); 
+      if (auth.currentUser?.displayName) {
+        setCurrentDisplayName(auth.currentUser.displayName);
+      }
+    }, [refreshData])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await refreshData();
+    if (auth.currentUser?.displayName) {
+      setCurrentDisplayName(auth.currentUser.displayName);
+    }
     setRefreshing(false);
   }, [refreshData]);
 
@@ -74,10 +102,12 @@ const AdminDashboard = () => {
         headerHeight={headerHeight}
         revenueOpacity={revenueOpacity}
         topPadding={insets.top + 10}
-        totalRevenue={stats.totalRevenue}
-        totalExpense={stats.totalExpense}
-        totalProfit={stats.totalProfit}
-        lowStockCount={stats.lowStockCount}
+        role="Administrator"
+        displayName={currentDisplayName}
+        totalRevenue={stats.totalRevenue || 0}
+        totalExpense={stats.totalExpense || 0}
+        totalProfit={stats.totalProfit || 0}
+        lowStockCount={stats.lowStockCount || 0}
         onLowStockPress={() => navigation.navigate('Product')}
       />
 
@@ -136,21 +166,21 @@ const AdminDashboard = () => {
           </View>
 
           <View style={styles.rankingSection}>
-            <ProductRankingCard 
-              title="Top 10 Penjualan Produk"
-              data={stats.salesRanking || []}
-              unit="Terjual"
-              color={COLORS.primary}
-            />
+             <ProductRankingCard 
+                          title="Produk Terlaris Hari Ini" 
+                          data={stats.salesRanking || []} 
+                          unit="Terjual" 
+                          color={COLORS.secondary} 
+                        />
+            
+                        {/* 5. RANKING STOK - Dimunculkan kembali untuk kontrol inventori */}
+                        <ProductRankingCard 
+                          title="Peringatan Stok Rendah" 
+                          data={stats.stockRanking || []} 
+                          unit="Sisa" 
+                          color="#ef4444" // Merah untuk peringatan
+                        />
 
-            <ProductRankingCard 
-              title="Top 10 Stok Produk"
-              data={stats.stockRanking || []}
-              unit="Unit"
-              color="#3b82f6" 
-            />
-
-            {/* TAMPILKAN 5 AKTIVITAS TERBARU */}
             <RecentActivityCard 
               activities={activities.slice(0, 5)}
               onSeeMore={() => setModalVisible(true)}
@@ -158,7 +188,7 @@ const AdminDashboard = () => {
           </View>
         </View>
 
-        <Text style={styles.footerBrand}>Swiftstock by Efendi 2025</Text>
+        <Text style={styles.footerBrand}>Swiftstock by Efendi • 2025</Text>
       </Animated.ScrollView>
 
       {/* MODAL RIWAYAT LENGKAP */}
@@ -180,7 +210,7 @@ const AdminDashboard = () => {
               <View style={{ padding: 20 }}>
                 <RecentActivityCard 
                   activities={activities}
-                  onSeeMore={() => {}} // Sembunyikan tombol di dalam modal
+                  onSeeMore={() => {}}
                 />
               </View>
             </ScrollView>
@@ -210,7 +240,7 @@ const styles = StyleSheet.create({
   rankingSection: {
     marginTop: 20,
     paddingBottom: 20,
-    gap: 15, // Diperbesar sedikit agar tidak terlalu rapat
+    gap: 15,
   },
   footerBrand: { 
     textAlign: 'center', 
@@ -219,7 +249,6 @@ const styles = StyleSheet.create({
     marginTop: 40, 
     fontFamily: 'PoppinsRegular' 
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

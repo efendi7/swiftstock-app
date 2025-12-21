@@ -5,7 +5,8 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import CashierDashboard from '../screens/Main/CashierDashboard';
 import TransactionScreen from '../screens/Main/TransactionScreen';
-import ProductScreen from '../screens/Main/ProductScreen'; // Import ProductScreen
+import ProductScreen from '../screens/Main/ProductScreen';
+import ProfileScreen from '../screens/Main/ProfileScreen'; // Pastikan ini diimport
 import { BottomNavigation } from '../components/dashboard/BottomNavigation';
 import { CashierTabParamList, RootStackParamList } from './types';
 
@@ -19,7 +20,7 @@ const CashierTabsLayout = () => {
       tabBar={(props) => (
         <BottomNavigation 
           {...props} 
-          // Tombol FAB (Scan) akan membuka layar Cashier (Mesin Jualan)
+          // Cashier: Tombol tengah membuka layar transaksi/scan
           onFabPress={() => rootNav.navigate('Cashier')} 
         />
       )}
@@ -28,6 +29,7 @@ const CashierTabsLayout = () => {
       <Tab.Screen name="CashierDashboard" component={CashierDashboard} />
       <Tab.Screen name="Product" component={ProductScreen} />
       <Tab.Screen name="Transaction" component={TransactionScreen} />
+      <Tab.Screen name="Profile" component={ProfileScreen} /> 
     </Tab.Navigator>
   );
 };
