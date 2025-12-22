@@ -15,9 +15,16 @@ import EditProductModal from '../Main/modal/EditProductModal';
 import { Product } from '../../types/product.types';
 import { Transaction } from '../../types/transaction.type';
 
-type SortType = 'newest' | 'oldest' | 'stock-high' | 'stock-low' | 'low-stock-warn' | 'safe-stock';
-type FilterMode = 'all' | 'specificMonth' | 'today';
+type SortType = 
+  | 'sold-desc' 
+  | 'date-desc' 
+  | 'date-asc' 
+  | 'stock-safe' 
+  | 'stock-critical' 
+  | 'stock-empty'
+  | 'newest'; // default awal
 
+type FilterMode = 'all' | 'today' | 'range'; // Hapus 'specificMonth' karena sudah jadi 'range'
 const ProductScreen = ({ navigation }: any) => {
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
@@ -29,8 +36,8 @@ const ProductScreen = ({ navigation }: any) => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
-  const [sortType, setSortType] = useState<SortType>('newest');
+const [filterMode, setFilterMode] = useState<FilterMode>('all');
+const [sortType, setSortType] = useState<SortType>('date-desc'); // Ganti 'newest' ke 'date-desc' agar sinkron
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -137,19 +144,15 @@ const ProductScreen = ({ navigation }: any) => {
     setShowEditModal(true);
   };
 
-  const filterProps = {
-    products,
-    searchQuery,
-    filterMode,
-    sortType,
-    selectedMonth,
-    selectedYear,
-    onFiltered: setFilteredProducts,
-    onFilterModeChange: (newMode: FilterMode) => setFilterMode(newMode),
-    onSortChange: (newSort: SortType) => setSortType(newSort),
-    onMonthChange: setSelectedMonth,
-    onYearChange: setSelectedYear,
-  };
+ const filterProps = {
+  products,
+  searchQuery,
+  filterMode,
+  sortType,
+  onFiltered: setFilteredProducts,
+  onFilterModeChange: (newMode: FilterMode) => setFilterMode(newMode),
+  onSortChange: (newSort: string) => setSortType(newSort as SortType),
+};
 
   if (loading && products.length === 0) {
     return (
@@ -181,7 +184,8 @@ const ProductScreen = ({ navigation }: any) => {
           refreshing={refreshing} 
           onRefresh={loadProducts}
           onEditPress={handleEditPress}
-          isAdmin={userRole === 'admin'} // ✅ Pass isAdmin ke ProductList
+          isAdmin={userRole === 'admin'} 
+          sortType={sortType}
         />
       </View>
 

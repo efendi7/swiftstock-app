@@ -1,122 +1,83 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Collapsible from 'react-native-collapsible';
-import { ChevronDown, ChevronUp, Filter } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Filter, Calendar, TrendingUp, Clock } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
-import MonthPicker from './MonthPicker';
+import DateTimePickerModal from "react-native-modal-datetime-picker";
 
-// Definisi Tipe Filter Baru
-type SortType = 'newest' | 'oldest' | 'stock-high' | 'stock-low' | 'low-stock-warn' | 'safe-stock';
-type FilterMode = 'all' | 'specificMonth' | 'today';
-
-interface Props {
+interface FilterProps {
   products: any[];
   searchQuery: string;
-  filterMode: FilterMode;
-  sortType: SortType;
-  selectedMonth: number;
-  selectedYear: number;
+  filterMode: 'all' | 'today' | 'range';
+  sortType: string;
   onFiltered: (filtered: any[]) => void;
-  onFilterModeChange: (mode: FilterMode) => void;
-  onSortChange: (sort: SortType) => void;
-  onMonthChange: (month: number) => void;
-  onYearChange: (year: number) => void;
+  onFilterModeChange: (mode: any) => void;
+  onSortChange: (sort: string) => void;
 }
 
-const FilterSection = ({
+export const FilterSection = ({
   products,
   searchQuery,
   filterMode,
   sortType,
-  selectedMonth,
-  selectedYear,
   onFiltered,
   onFilterModeChange,
   onSortChange,
-  onMonthChange,
-  onYearChange,
-}: Props) => {
+}: FilterProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [currentCount, setCurrentCount] = useState(products.length);
 
   const applyFilters = useCallback(() => {
     let filtered = [...products];
 
-    // 1. Filter Berdasarkan Pencarian
+    // 1. Filter Pencarian
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      filtered = filtered.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.barcode.includes(q) ||
-        p.supplier?.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q)
+      filtered = filtered.filter(p => 
+        p.name.toLowerCase().includes(q) || 
+        p.barcode.includes(q)
       );
     }
 
-    // 2. Filter Berdasarkan Waktu (Bulan/Hari Ini)
-    if (filterMode === 'specificMonth') {
-      filtered = filtered.filter(p => {
-        if (!p.createdAt) return false;
-        const date = p.createdAt.toDate();
-        return date.getMonth() === selectedMonth && date.getFullYear() === selectedYear;
-      });
-    }
-
+    // 2. Filter Waktu (Berdasarkan Tanggal Dibuat)
     if (filterMode === 'today') {
-      const today = new Date();
-      filtered = filtered.filter(p => {
-        if (!p.createdAt) return false;
-        const date = p.createdAt.toDate();
-        return date.toDateString() === today.toDateString();
-      });
+      const today = new Date().toDateString();
+      filtered = filtered.filter(p => p.createdAt?.toDate?.().toDateString() === today);
+    } else if (filterMode === 'range') {
+      const targetDate = selectedDate.toDateString();
+      filtered = filtered.filter(p => p.createdAt?.toDate?.().toDateString() === targetDate);
     }
 
-    // 3. Filter Berdasarkan Kondisi Stok
-    if (sortType === 'low-stock-warn') {
-      filtered = filtered.filter(p => p.stock < 10);
-    } else if (sortType === 'safe-stock') {
-      filtered = filtered.filter(p => p.stock >= 10);
+    // 3. Filter Status Stok (Filter Data)
+    if (sortType === 'stock-safe') {
+      filtered = filtered.filter(p => p.stock > 10);
+    } else if (sortType === 'stock-critical') {
+      filtered = filtered.filter(p => p.stock > 0 && p.stock <= 10);
+    } else if (sortType === 'stock-empty') {
+      filtered = filtered.filter(p => p.stock <= 0);
     }
 
-    // 4. Pengurutan (Sorting)
+    // 4. Pengurutan (Sorting Logic)
     filtered.sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-      const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
-      
       switch (sortType) {
-        case 'newest': return dateB - dateA;
-        case 'oldest': return dateA - dateB;
-        case 'stock-high': return b.stock - a.stock;
-        case 'stock-low': return a.stock - b.stock;
+        case 'sold-desc': return (b.sold || 0) - (a.sold || 0);
+        case 'date-desc': return (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0);
+        case 'date-asc': return (a.createdAt?.toDate?.() || 0) - (b.createdAt?.toDate?.() || 0);
+        case 'stock-safe': return b.stock - a.stock;
+        case 'stock-critical': return a.stock - b.stock;
         default: return 0;
       }
     });
 
+    setCurrentCount(filtered.length);
     onFiltered(filtered);
-  }, [products, searchQuery, filterMode, sortType, selectedMonth, selectedYear, onFiltered]);
+  }, [products, searchQuery, filterMode, sortType, selectedDate, onFiltered]);
 
   useEffect(() => {
     applyFilters();
   }, [applyFilters]);
-
-  // Helper untuk time filter buttons (Hari Ini & Pilih Bulan)
-  const TimeFilterBtn = ({ label, mode, active }: any) => (
-    <TouchableOpacity
-      style={[styles.timeFilterItem, active && { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary }]}
-      onPress={() => onFilterModeChange(mode)}
-    >
-      <Text style={[styles.timeFilterText, active && styles.gridTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-
-  // Helper untuk sorting/stock filter buttons
-  const FilterBtn = ({ label, type, active, color = COLORS.secondary }: any) => (
-    <TouchableOpacity
-      style={[styles.gridItem, active && { backgroundColor: color, borderColor: color }]}
-      onPress={() => onSortChange(type)}
-    >
-      <Text style={[styles.gridText, active && styles.gridTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
 
   return (
     <View style={styles.container}>
@@ -130,135 +91,116 @@ const FilterSection = ({
           <Text style={styles.toggleText}>Filter & Urutkan</Text>
         </View>
         <View style={styles.toggleRight}>
-          <Text style={styles.countText}>{products.length} Produk</Text>
+          <Text style={styles.countText}>{currentCount} Produk</Text>
           {isExpanded ? <ChevronUp size={20} color="#94A3B8" /> : <ChevronDown size={20} color="#94A3B8" />}
         </View>
       </TouchableOpacity>
 
-      <Collapsible collapsed={!isExpanded} duration={300}>
+      <Collapsible collapsed={!isExpanded}>
         <View style={styles.filterBox}>
-          {/* BARIS PERTAMA: TIME FILTERS (2 KOLOM) */}
-          <View style={styles.timeFilterRow}>
-            <TimeFilterBtn label="Hari Ini" mode="today" active={filterMode === 'today'} />
-            <TimeFilterBtn label="Pilih Bulan" mode="specificMonth" active={filterMode === 'specificMonth'} />
+          
+          {/* BAGIAN WAKTU */}
+          <Text style={styles.sectionLabel}>Waktu Produk:</Text>
+          <View style={styles.row}>
+            <TouchableOpacity 
+              style={[styles.btn, filterMode === 'today' && styles.btnActive]}
+              onPress={() => onFilterModeChange('today')}
+            >
+              <Clock size={14} color={filterMode === 'today' ? '#FFF' : COLORS.secondary} style={{marginRight: 6}}/>
+              <Text style={[styles.btnText, filterMode === 'today' && styles.btnTextActive]}>Hari Ini</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.btn, filterMode === 'range' && styles.btnActive]}
+              onPress={() => setDatePickerVisibility(true)}
+            >
+              <Calendar size={14} color={filterMode === 'range' ? '#FFF' : COLORS.secondary} style={{marginRight: 6}}/>
+              <Text style={[styles.btnText, filterMode === 'range' && styles.btnTextActive]}>
+                {filterMode === 'range' ? selectedDate.toLocaleDateString('id-ID') : 'Pilih Tanggal'}
+              </Text>
+            </TouchableOpacity>
+            
+            {filterMode !== 'all' && (
+               <TouchableOpacity onPress={() => onFilterModeChange('all')} style={styles.resetBtn}>
+                 <Text style={styles.resetText}>Reset</Text>
+               </TouchableOpacity>
+            )}
           </View>
 
-          {/* MONTH PICKER - Muncul smooth dengan Collapsible */}
-          <Collapsible collapsed={filterMode !== 'specificMonth'} duration={300}>
-            <View style={styles.monthPickerWrapper}>
-              <MonthPicker
-                selectedMonth={selectedMonth}
-                selectedYear={selectedYear}
-                onMonthChange={onMonthChange}
-                onYearChange={onYearChange}
-              />
-            </View>
-          </Collapsible>
+          {/* BAGIAN URUTAN & STOK */}
+          <Text style={styles.sectionLabel}>Urutkan & Status Stok:</Text>
+          <View style={styles.grid}>
+            {/* Baris 1 */}
+            <SortBtn 
+              label="Terlaris" 
+              type="sold-desc" 
+              current={sortType} 
+              onSelect={onSortChange} 
+              icon={<TrendingUp size={12} color={sortType === 'sold-desc' ? '#FFF' : '#F59E0B'} />} 
+            />
+            <SortBtn label="Tgl Terbaru" type="date-desc" current={sortType} onSelect={onSortChange} />
+            <SortBtn label="Tgl Terlama" type="date-asc" current={sortType} onSelect={onSortChange} />
 
-          {/* BARIS KEDUA & KETIGA: SORTING & STOCK FILTERS (3 KOLOM) */}
-          <View style={styles.gridContainer}>
-            <FilterBtn label="Terbaru" type="newest" active={sortType === 'newest'} />
-            <FilterBtn label="Tertinggi" type="stock-high" active={sortType === 'stock-high'} />
-            <FilterBtn label="Terendah" type="stock-low" active={sortType === 'stock-low'} />
-            
-            <FilterBtn label="Terlama" type="oldest" active={sortType === 'oldest'} />
-            <FilterBtn label="Stok < 10" type="low-stock-warn" active={sortType === 'low-stock-warn'} color={COLORS.danger} />
-            <FilterBtn label="Stok Aman" type="safe-stock" active={sortType === 'safe-stock'} color={COLORS.success} />
+            {/* Baris 2 */}
+            <SortBtn label="Stok Aman" type="stock-safe" current={sortType} onSelect={onSortChange} activeColor="#22C55E" />
+            <SortBtn label="Stok Kritis" type="stock-critical" current={sortType} onSelect={onSortChange} activeColor="#F59E0B" />
+            <SortBtn label="Stok Habis" type="stock-empty" current={sortType} onSelect={onSortChange} activeColor="#EF4444" />
           </View>
         </View>
       </Collapsible>
+
+      <DateTimePickerModal
+        isVisible={isDatePickerVisible}
+        mode="date"
+        onConfirm={(date: Date) => {
+          setSelectedDate(date);
+          onFilterModeChange('range');
+          setDatePickerVisibility(false);
+        }}
+        onCancel={() => setDatePickerVisibility(false)}
+      />
     </View>
   );
 };
 
+// Komponen Tombol Internal
+const SortBtn = ({ label, type, current, onSelect, icon, activeColor }: any) => {
+  const isActive = current === type;
+  const backgroundColor = isActive ? (activeColor || COLORS.secondary) : '#F8FAFC';
+  const borderColor = isActive ? (activeColor || COLORS.secondary) : '#E2E8F0';
+
+  return (
+    <TouchableOpacity 
+      style={[styles.gridItem, { backgroundColor, borderColor }]}
+      onPress={() => onSelect(type)}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        {icon}
+        <Text style={[styles.gridText, isActive && { color: '#FFF', fontFamily: 'PoppinsBold' }]}>{label}</Text>
+      </View>
+    </TouchableOpacity>
+  );
+};
+
 const styles = StyleSheet.create({
-  container: {
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderColor: '#F1F5F9',
-  },
-  toggle: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-  },
+  container: { backgroundColor: '#FFF', borderBottomWidth: 1, borderColor: '#F1F5F9' },
+  toggle: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 20, alignItems: 'center' },
   toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   toggleRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  toggleText: { 
-    color: '#1E293B', 
-    fontFamily: 'PoppinsSemiBold', 
-    fontSize: 14 
-  },
-  countText: { 
-    color: '#64748B', 
-    fontFamily: 'PoppinsMedium', 
-    fontSize: 12 
-  },
-  filterBox: { 
-    paddingHorizontal: 16, 
-    paddingBottom: 20,
-    paddingTop: 5,
-  },
-  
-  // TIME FILTER SECTION (Hari Ini & Pilih Bulan)
-  timeFilterRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
-  },
-  timeFilterItem: {
-    flex: 1,
-    paddingVertical: 12,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  timeFilterText: { 
-    color: '#64748B', 
-    fontSize: 13, 
-    fontFamily: 'PoppinsSemiBold',
-  },
-  
-  // MONTH PICKER
-  monthPickerWrapper: {
-    marginBottom: 12,
-    paddingVertical: 8,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-  },
-  
-  // SORTING & STOCK FILTERS GRID (3 KOLOM)
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  gridItem: {
-    width: '31.5%', // Grid 3 kolom
-    paddingVertical: 10,
-    paddingHorizontal: 2,
-    backgroundColor: '#F8FAFC',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-  },
-  gridText: { 
-    color: '#64748B', 
-    fontSize: 11, 
-    fontFamily: 'PoppinsMedium',
-    textAlign: 'center'
-  },
-  gridTextActive: { 
-    color: '#FFF', 
-    fontFamily: 'PoppinsBold' 
-  },
+  toggleText: { fontFamily: 'PoppinsSemiBold', fontSize: 14, color: '#1E293B' },
+  countText: { color: '#64748B', fontSize: 12, fontFamily: 'PoppinsMedium' },
+  filterBox: { paddingHorizontal: 16, paddingBottom: 20, paddingTop: 5 },
+  sectionLabel: { fontSize: 11, fontFamily: 'PoppinsMedium', color: '#94A3B8', marginBottom: 8, marginTop: 12, marginLeft: 4 },
+  row: { flexDirection: 'row', gap: 8, marginBottom: 5, alignItems: 'center' },
+  btn: { flex: 1, flexDirection: 'row', paddingVertical: 10, backgroundColor: '#F8FAFC', borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
+  btnActive: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
+  btnText: { fontSize: 12, fontFamily: 'PoppinsSemiBold', color: '#64748B' },
+  btnTextActive: { color: '#FFF' },
+  resetBtn: { paddingHorizontal: 8 },
+  resetText: { color: '#EF4444', fontSize: 12, fontFamily: 'PoppinsBold' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  gridItem: { width: '31.5%', paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  gridText: { fontSize: 10, fontFamily: 'PoppinsMedium', color: '#64748B', textAlign: 'center' }
 });
 
 export default FilterSection;
