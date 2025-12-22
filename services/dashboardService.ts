@@ -49,34 +49,25 @@ export class DashboardService {
       const startTimestamp = Timestamp.fromDate(dateRange.startDate);
       const endTimestamp = Timestamp.fromDate(dateRange.endDate);
 
-      // --- 1. DATA PRODUK (STOK & RANKING STOK) ---
+      // --- 1. DATA PRODUK (STOK) ---
       const productsSnap = await getDocs(collection(db, 'products'));
       let lowStockCount = 0;
-      let rawStockRanking: ProductStat[] = [];
+      const productsData: Array<{ id: string; name: string; stock: number }> = [];
 
       productsSnap.forEach((doc) => {
         const data = doc.data();
-        
-        // PERBAIKAN: Paksa nilai stok menjadi Number untuk menghindari kesalahan sort string
-        // Jika data.stock adalah "2" dan "10", tanpa Number() sort akan salah (string-based)
         const stockValue = Number(data.stock || 0);
         
         if (stockValue < 10) lowStockCount++;
         
-        rawStockRanking.push({
+        productsData.push({
           id: doc.id,
           name: data.name || 'Tanpa Nama',
-          value: stockValue,
+          stock: stockValue,
         });
       });
 
-      // LOGIKA: Urutkan dari stok TERKECIL ke terbesar (Ascending)
-      // Ini memastikan produk yang stoknya 0, 1, 2 berada di posisi paling atas
-      const stockRanking = rawStockRanking
-        .sort((a, b) => a.value - b.value)
-        .slice(0, 10);
-
-      // --- 2. DATA TRANSAKSI ---
+      // --- 2. DATA TRANSAKSI (untuk menghitung sold) ---
       const transactionsQuery = query(
         collection(db, 'transactions'),
         where('date', '>=', startTimestamp),
@@ -85,8 +76,14 @@ export class DashboardService {
       const transactionsSnap = await getDocs(transactionsQuery);
 
       let totalRevenue = 0;
-      let totalOut = 0; // Total unit barang terjual
-      const salesMap = new Map<string, { name: string; qty: number }>();
+      let totalOut = 0;
+      
+      // ✅ Map untuk menghitung jumlah terjual per produk (SAMA seperti ProductScreen)
+      const soldMap = new Map<string, number>();
+      
+      // Map untuk nama produk (untuk salesRanking)
+      const productNameMap = new Map<string, string>();
+      
       const chartDataMap = this.generateChartDataMap(preset);
 
       transactionsSnap.forEach((doc) => {
@@ -104,28 +101,40 @@ export class DashboardService {
           if (Array.isArray(data.items)) {
             data.items.forEach((item: any) => {
               const qty = Number(item.qty || 0);
+              const productId = item.productId;
+              
               totalOut += qty;
-              const current = salesMap.get(item.productId) || {
-                name: item.productName || 'Produk Terhapus',
-                qty: 0,
-              };
-              salesMap.set(item.productId, {
-                name: current.name,
-                qty: current.qty + qty,
-              });
+              
+              // ✅ Hitung sold per produk (KONSISTEN dengan ProductScreen)
+              if (productId) {
+                soldMap.set(productId, (soldMap.get(productId) || 0) + qty);
+                productNameMap.set(productId, item.productName || 'Produk Terhapus');
+              }
             });
           }
         }
       });
 
-      // LOGIKA: Urutkan penjualan terbanyak ke terkecil (Descending)
-      const salesRanking: ProductStat[] = Array.from(salesMap, ([id, info]) => ({
-        id,
-        name: info.name,
-        value: info.qty,
-      })).sort((a, b) => b.value - a.value).slice(0, 10);
+      // --- 3. STOCK RANKING (Urutkan dari stok terkecil) ---
+      const stockRanking: ProductStat[] = productsData
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          value: p.stock,
+        }))
+        .sort((a, b) => a.value - b.value)
+        .slice(0, 10);
 
-      // --- 3. DATA PENGELUARAN ---
+      // --- 4. SALES RANKING (Produk terlaris berdasarkan transaksi) ---
+      const salesRanking: ProductStat[] = Array.from(soldMap, ([id, qty]) => ({
+        id,
+        name: productNameMap.get(id) || 'Produk Tidak Diketahui',
+        value: qty,
+      }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 10);
+
+      // --- 5. DATA PENGELUARAN ---
       const expenseQuery = query(
         collection(db, 'stock_purchases'),
         where('date', '>=', startTimestamp),

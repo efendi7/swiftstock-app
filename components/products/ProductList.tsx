@@ -8,10 +8,11 @@ interface Props {
   data: Product[];
   refreshing: boolean;
   onRefresh: () => void;
-  onEditPress: (product: Product) => void; // Hilangkan tanda tanya (?) karena sekarang wajib
+  onEditPress: (product: Product) => void;
+  isAdmin?: boolean; // ✅ Tambahkan prop isAdmin
 }
 
-const ProductList = ({ data, refreshing, onRefresh, onEditPress }: Props) => {
+const ProductList = ({ data, refreshing, onRefresh, onEditPress, isAdmin = false }: Props) => {
   const insets = useSafeAreaInsets();
 
   return (
@@ -20,7 +21,10 @@ const ProductList = ({ data, refreshing, onRefresh, onEditPress }: Props) => {
       renderItem={({ item }) => (
         <ProductCard 
           product={item} 
-          onEditPress={onEditPress} 
+          onEditPress={onEditPress}
+          isAdmin={isAdmin}
+          isTopSeller={(item as any).isTopSeller} // ✅ Pass isTopSeller
+          topRank={(item as any).topRank} // ✅ Pass topRank
         />
       )}
       keyExtractor={item => item.id}

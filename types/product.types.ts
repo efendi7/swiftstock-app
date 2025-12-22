@@ -18,8 +18,9 @@ export interface Product {
   category?: string;
   stock: number;
   barcode: string;
-  imageUrl?: string; // Tambahkan ini (optional karena mungkin produk lama belum punya foto)
-  createdAt: any; 
+  imageUrl?: string;
+  createdAt: any;
+  sold?: number; // <--- TAMBAHKAN INI (opsional)
 }
 
 export interface ProductValidationResult {
