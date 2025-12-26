@@ -14,19 +14,19 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { X } from 'lucide-react-native';
-import { COLORS } from '../../constants/colors';
+import { COLORS } from '../../../../constants/colors';
 
 // Import Firebase Auth untuk sinkronisasi profil real-time
-import { auth } from '../../services/firebaseConfig';
-import { useDashboard } from '../../hooks/useDashboard';
+import { auth } from '../../../../services/firebaseConfig';
+import { useDashboard } from '../../../../hooks/useDashboard';
 
-// Components
-import { DashboardHeader } from '../../components/dashboard/DashboardHeader';
-import { StatsGrid } from '../../components/dashboard/StatsGrid';
-import { DashboardChart } from '../../components/dashboard/DashboardChart';
-import { DateRangeSelector } from '../../components/dashboard/DateRangeSelector';
-import { ProductRankingCard } from '../../components/dashboard/ProductRankingCard';
-import { RecentActivityCard } from '../../components/dashboard/RecentActivityCard';
+
+import { AdminDashboardHeader } from './sections/AdminDashboardHeader';
+import { AdminStatsGrid } from './sections/AdminStatsGrid';
+import { AdminDashboardChart } from './sections/AdminDashboardChart';
+import { DateRangeSelector } from '../../../../components/dashboard/DateRangeSelector';
+import { AdminSalesRanking, AdminStockRanking  } from './sections/AdminRankings';
+import { AdminActivity } from './sections/AdminActivity';
 
 const AdminDashboard = () => {
   const insets = useSafeAreaInsets();
@@ -50,7 +50,7 @@ const AdminDashboard = () => {
     auth.currentUser?.displayName || stats.userName || 'User Swiftstock'
   );
 
-  const HEADER_MAX_HEIGHT = 230 + insets.top;
+  const HEADER_MAX_HEIGHT = 265 + insets.top;
   const HEADER_MIN_HEIGHT = 70 + insets.top;
 
   // Update nama setiap kali layar kembali difokuskan
@@ -83,13 +83,13 @@ const AdminDashboard = () => {
   };
 
   const headerHeight = scrollY.interpolate({
-    inputRange: [0, 140], 
+    inputRange: [0, 180], 
     outputRange: [HEADER_MAX_HEIGHT, HEADER_MIN_HEIGHT], 
     extrapolate: 'clamp',
   });
 
   const revenueOpacity = scrollY.interpolate({
-    inputRange: [0, 100], 
+    inputRange: [0, 120], 
     outputRange: [1, 0], 
     extrapolate: 'clamp',
   });
@@ -98,7 +98,7 @@ const AdminDashboard = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <DashboardHeader
+      <AdminDashboardHeader
         headerHeight={headerHeight}
         revenueOpacity={revenueOpacity}
         topPadding={insets.top + 10}
@@ -150,7 +150,7 @@ const AdminDashboard = () => {
             { opacity: loading && !refreshing ? 0.7 : 1 }
           ]}
         >
-          <StatsGrid
+          <AdminStatsGrid
             totalProducts={stats.totalProducts}
             totalIn={stats.totalIn}
             totalOut={stats.totalOut}
@@ -158,7 +158,7 @@ const AdminDashboard = () => {
           />
 
           <View style={styles.chartWrapper}>
-            <DashboardChart 
+            <AdminDashboardChart 
               data={stats.weeklyData} 
               isLoading={loading}
               selectedPreset={selectedPreset}
@@ -166,22 +166,25 @@ const AdminDashboard = () => {
           </View>
 
           <View style={styles.rankingSection}>
-             <ProductRankingCard 
-                          title="Produk Terlaris Hari Ini" 
-                          data={stats.salesRanking || []} 
-                          unit="Terjual" 
-                          color={COLORS.secondary} 
-                        />
-            
-                        {/* 5. RANKING STOK - Dimunculkan kembali untuk kontrol inventori */}
-                        <ProductRankingCard 
-                          title="Peringatan Stok Rendah" 
-                          data={stats.stockRanking || []} 
-                          unit="Sisa" 
-                          color="#ef4444" // Merah untuk peringatan
-                        />
+            <AdminSalesRanking 
+    title="Produk Terlaris Hari Ini" 
+    data={stats.salesRanking || []} 
+    unit="Terjual" 
+    color={COLORS.secondary} 
+    // Navigasi ke Product dengan parameter filter Terlaris
+    onSeeMore={() => navigation.navigate('Product', { filterType: 'sold-desc' })} 
+  />
 
-            <RecentActivityCard 
+  <AdminStockRanking 
+    title="Peringatan Stok Rendah" 
+    data={stats.stockRanking || []} 
+    unit="Sisa" 
+    color="#ef4444" 
+    // Navigasi ke Product dengan parameter filter Kritis
+    onSeeMore={() => navigation.navigate('Product', { filterType: 'stock-critical' })} 
+  />
+
+            <AdminActivity 
               activities={activities.slice(0, 5)}
               onSeeMore={() => setModalVisible(true)}
             />
@@ -208,7 +211,7 @@ const AdminDashboard = () => {
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ padding: 20 }}>
-                <RecentActivityCard 
+                <AdminActivity
                   activities={activities}
                   onSeeMore={() => {}}
                 />

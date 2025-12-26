@@ -25,7 +25,12 @@ export const BottomNavigation: React.FC<Props> = ({
   const currentRoute = state.routes[state.index].name;
   const isCashierRole = state.routeNames.includes('CashierDashboard');
 
-  const isActive = (routeName: string) => currentRoute === routeName;
+  const isActive = (routeName: string) => {
+  if (routeName === 'Home') {
+    return currentRoute === 'AdminDashboard' || currentRoute === 'CashierDashboard';
+  }
+  return currentRoute === routeName;
+};
 
   const handleDashboardPress = () => {
     navigation.navigate(isCashierRole ? 'CashierDashboard' : 'AdminDashboard');
@@ -37,14 +42,14 @@ export const BottomNavigation: React.FC<Props> = ({
         
         {/* 1. DASHBOARD */}
         <TouchableOpacity style={styles.navItem} onPress={handleDashboardPress}>
-          <LayoutDashboard
-            size={22}
-            color={isActive('AdminDashboard') || isActive('CashierDashboard') ? COLORS.secondary : COLORS.textLight}
-          />
-          <Text style={[styles.navLabel, { color: isActive('AdminDashboard') || isActive('CashierDashboard') ? COLORS.secondary : COLORS.textLight }]}>
-            Home
-          </Text>
-        </TouchableOpacity>
+  <LayoutDashboard
+    size={22}
+    color={isActive('Home') ? COLORS.secondary : COLORS.textLight}
+  />
+  <Text style={[styles.navLabel, { color: isActive('Home') ? COLORS.secondary : COLORS.textLight }]}>
+    Home
+  </Text>
+</TouchableOpacity>
 
         {/* 2. PRODUK (KASIR & ADMIN BISA LIHAT) */}
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Product')}>

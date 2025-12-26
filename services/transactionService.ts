@@ -4,12 +4,50 @@ import {
   doc, 
   collection, 
   serverTimestamp,
-  increment 
+  increment,
+  getDocs,
+  writeBatch 
 } from 'firebase/firestore';
 
 /**
- * Fungsi untuk menangani proses checkout transaksi
- * Mencatat transaksi ke Firestore dan membuat log aktivitas otomatis
+ * 1. FUNGSI MIGRASI DATA LAMA (Jalankan sekali dari Profile)
+ */
+export const migrateSoldCount = async () => {
+  try {
+    console.log("Memulai migrasi soldCount...");
+    const transactionsSnap = await getDocs(collection(db, 'transactions'));
+    const soldMap: Record<string, number> = {};
+
+    // Hitung total dari semua transaksi lama
+    transactionsSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      const items = data.items || [];
+      items.forEach((item: any) => {
+        if (item.productId) {
+          soldMap[item.productId] = (soldMap[item.productId] || 0) + (item.qty || 0);
+        }
+      });
+    });
+
+    // Update dokumen produk menggunakan Batch
+    const batch = writeBatch(db);
+    const productsSnap = await getDocs(collection(db, 'products'));
+    
+    productsSnap.forEach(prodDoc => {
+      const totalSold = soldMap[prodDoc.id] || 0;
+      batch.update(prodDoc.ref, { soldCount: totalSold });
+    });
+
+    await batch.commit();
+    return { success: true };
+  } catch (error) {
+    console.error("Migrasi Gagal:", error);
+    throw error;
+  }
+};
+
+/**
+ * 2. FUNGSI CHECKOUT (Update Stok & SoldCount Real-time)
  */
 export const handleCheckoutProcess = async (
   cartItems: any[], 
@@ -48,10 +86,13 @@ export const handleCheckoutProcess = async (
       const year = new Date().getFullYear();
       const transactionNumber = `TRX-${year}-${String(nextNumber).padStart(4, '0')}`;
 
-      // 3. Update Stok Produk
+      // 3. Update Stok Produk & SoldCount
       cartItems.forEach((item) => {
         const pRef = doc(db, 'products', item.id);
-        transaction.update(pRef, { stock: increment(-item.qty) });
+        transaction.update(pRef, { 
+          stock: increment(-item.qty),
+          soldCount: increment(item.qty) // Update real-time di sini
+        });
       });
 
       // 4. Simpan Data Transaksi Utama
@@ -76,29 +117,17 @@ export const handleCheckoutProcess = async (
         }))
       });
 
-      // 5. LOG AKTIVITAS - Format Kalimat Sesuai Permintaan
+      // 5. Simpan Log Aktivitas
       const activityRef = doc(collection(db, 'activities'));
-      
-      // Hitung total quantity produk yang keluar
       const totalQty = cartItems.reduce((sum, item) => sum + item.qty, 0);
-
-      // Format daftar produk: 2 unit "Indomie", 1 unit "Susu"
       const productList = cartItems.map(item => `${item.qty} unit "${item.name}"`).join(', ');
-      
-      // Format nominal harga ke Rupiah
       const formattedPrice = `Rp ${total.toLocaleString('id-ID')}`;
-      const method = paymentMethod.toUpperCase();
       
-      // Susun pesan utama
-      let message = `Kasir Checkout total ${totalQty} produk yaitu ${productList} via ${method} seharga ${formattedPrice}`;
-      
-      // Tambahkan detail kembalian jika ada
+      let message = `Kasir Checkout total ${totalQty} produk yaitu ${productList} via ${paymentMethod.toUpperCase()} seharga ${formattedPrice}`;
       if (paymentMethod === 'cash' && changeAmount > 0) {
-        const formattedChange = `Rp ${changeAmount.toLocaleString('id-ID')}`;
-        message += ` dengan kembalian ${formattedChange}`;
+        message += ` dengan kembalian Rp ${changeAmount.toLocaleString('id-ID')}`;
       }
 
-      // Simpan log ke koleksi activities
       transaction.set(activityRef, {
         type: 'OUT',
         message: message,

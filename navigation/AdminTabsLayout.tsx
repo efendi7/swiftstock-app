@@ -2,15 +2,15 @@ import React, { useState } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import AdminDashboard from '../screens/Main/AdminDashboard';
-import ProductScreen from '../screens/Main/ProductScreen';
-import TransactionScreen from '../screens/Main/TransactionScreen';
+import AdminDashboard from '../screens/Main/dashboard/admin/AdminDashboard';
+import ProductScreen from '../screens/Main/product/ProductScreen';
+import TransactionScreen from '../screens/Main/transaction/TransactionScreen';
 // --- 1. Buka Komentar Import ---
-import ProfileScreen from '../screens/Main/ProfileScreen'; 
+import ProfileScreen from '../screens/Main/profile/ProfileScreen'; 
 
 import { AdminTabParamList } from './types';
 import { BottomNavigation } from '../components/dashboard/BottomNavigation';
-import AddProductModal from '../screens/Main/modal/AddProductModal';
+import AddProductModal from '../screens/Main/product/modal/AddProductModal';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();
 

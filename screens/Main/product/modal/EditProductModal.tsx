@@ -8,11 +8,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { X, Save, Edit3, Lock } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { COLORS } from '../../../constants/colors';
-import { useProductForm } from '../../../hooks/useProductForm';
-import { ProductFormFields } from '../../../components/addproduct/ProductFormFields';
-import BarcodeScannerScreen from '../BarcodeScannerScreen';
-import { Product } from '../../../types/product.types';
+import { COLORS } from '../../../../constants/colors';
+import { useProductForm } from '../../../../hooks/useProductForm';
+import { ProductFormFields } from '../../../../components/addproduct/ProductFormFields';
+import BarcodeScannerScreen from '../../transaction/BarcodeScannerScreen';
+import { Product } from '../../../../types/product.types';
 
 const { height } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = height * 0.9;

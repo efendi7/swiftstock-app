@@ -9,7 +9,7 @@ import {
   Animated,
 } from 'react-native';
 import { CameraView, Camera } from 'expo-camera';
-import { COLORS } from '../../constants/colors'; // Pastikan path ini benar
+import { COLORS } from '../../../constants/colors'; // Pastikan path ini benar
 
 const { width } = Dimensions.get('window');
 const SCAN_AREA_SIZE = 250;
@@ -98,7 +98,7 @@ const BarcodeScannerScreen: React.FC<BarcodeScannerProps> = ({
           <View style={styles.middleContainer}>
             <View style={styles.unfocusedContainer} />
             <View style={[styles.focusedContainer, { borderColor: COLORS.success }]}>
-              {/* Garis pemindai menggunakan warna success dari konstanta */}
+              
               <Animated.View 
                 style={[
                   styles.scanLine, 

@@ -1,171 +1,96 @@
 import React from 'react';
 import { View, Text, StyleSheet, Dimensions, ActivityIndicator } from 'react-native';
 import { LineChart } from "react-native-gifted-charts";
-import { COLORS } from '../../constants/colors';
+import { COLORS } from '../../../constants/colors';
 import { TrendingUp } from 'lucide-react-native';
 
 const { width } = Dimensions.get('window');
 
-interface DashboardChartProps {
+export interface BaseChartProps {
   data?: any[];
   isLoading?: boolean;
   selectedPreset: 'today' | 'week' | 'month' | 'year';
+  title?: string;
+  accentColor?: string;
 }
 
-export const DashboardChart: React.FC<DashboardChartProps> = ({ 
+export const BaseDashboardChart: React.FC<BaseChartProps> = ({ 
   data, 
   isLoading, 
-  selectedPreset 
+  selectedPreset,
+  title = "Tren Penjualan",
+  accentColor = COLORS.primary
 }) => {
-  // Generate default data based on selected preset
+  
   const getDefaultData = () => {
     switch (selectedPreset) {
-      case 'today':
-        return [
-          { value: 0, label: '06' }, { value: 0, label: '09' },
-          { value: 0, label: '12' }, { value: 0, label: '15' },
-          { value: 0, label: '18' }, { value: 0, label: '21' },
-          { value: 0, label: '24' }, { value: 0, label: '03' }
-        ];
-      case 'week':
-        return [
-          { value: 0, label: 'Sen' }, { value: 0, label: 'Sel' },
-          { value: 0, label: 'Rab' }, { value: 0, label: 'Kam' },
-          { value: 0, label: 'Jum' }, { value: 0, label: 'Sab' },
-          { value: 0, label: 'Min' }
-        ];
-      case 'month':
-        return [
-          { value: 0, label: 'Mg 1' }, { value: 0, label: 'Mg 2' },
-          { value: 0, label: 'Mg 3' }, { value: 0, label: 'Mg 4' }
-        ];
-      case 'year':
-        return [
-          { value: 0, label: 'Jan' }, { value: 0, label: 'Feb' },
-          { value: 0, label: 'Mar' }, { value: 0, label: 'Apr' },
-          { value: 0, label: 'Mei' }, { value: 0, label: 'Jun' },
-          { value: 0, label: 'Jul' }, { value: 0, label: 'Agu' },
-          { value: 0, label: 'Sep' }, { value: 0, label: 'Okt' },
-          { value: 0, label: 'Nov' }, { value: 0, label: 'Des' }
-        ];
-      default:
-        return [];
+      case 'today': return [{value:0,label:'06'},{value:0,label:'09'},{value:0,label:'12'},{value:0,label:'15'},{value:0,label:'18'},{value:0,label:'21'},{value:0,label:'24'},{value:0,label:'03'}];
+      case 'week': return [{value:0,label:'Sen'},{value:0,label:'Sel'},{value:0,label:'Rab'},{value:0,label:'Kam'},{value:0,label:'Jum'},{value:0,label:'Sab'},{value:0,label:'Min'}];
+      case 'month': return [{value:0,label:'Mg 1'},{value:0,label:'Mg 2'},{value:0,label:'Mg 3'},{value:0,label:'Mg 4'}];
+      case 'year': return [{value:0,label:'Jan'},{value:0,label:'Feb'},{value:0,label:'Mar'},{value:0,label:'Apr'},{value:0,label:'Mei'},{value:0,label:'Jun'},{value:0,label:'Jul'},{value:0,label:'Agu'},{value:0,label:'Sep'},{value:0,label:'Okt'},{value:0,label:'Nov'},{value:0,label:'Des'}];
+      default: return [];
     }
   };
 
-  const defaultData = getDefaultData();
-  const chartData = data && data.length > 0 ? data : defaultData;
+  const chartData = data && data.length > 0 ? data : getDefaultData();
   const totalValue = chartData.reduce((sum, item) => sum + item.value, 0);
   const maxValue = Math.max(...chartData.map(item => item.value));
   const hasValidData = totalValue > 0;
 
   const getPeriodText = () => {
-    switch (selectedPreset) {
-      case 'today':
-        return 'Hari Ini';
-      case 'week':
-        const today = new Date();
-        const day = today.getDay();
-        const diff = today.getDate() - day + (day === 0 ? -6 : 1);
-        const monday = new Date(today.setDate(diff));
-        const sunday = new Date(monday);
-        sunday.setDate(monday.getDate() + 6);
-        const formatDate = (date: Date) => `${date.getDate()}/${date.getMonth() + 1}`;
-        return `${formatDate(monday)} - ${formatDate(sunday)}`;
-      case 'month':
-        const currentMonth = new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
-        return currentMonth;
-      case 'year':
-        return new Date().getFullYear().toString();
-      default:
-        return '';
-    }
-  };
-
-  const getChartWidth = () => {
-    return width - 80; // ✨ Fixed: Consistent width calculation
-  };
-
-  const getSpacing = () => {
-    const chartWidth = width - 80;
-    const dataPoints = chartData.length;
-    return chartWidth / (dataPoints + 1); // ✨ Better spacing distribution
+    if (selectedPreset === 'today') return 'Hari Ini';
+    if (selectedPreset === 'week') return '7 Hari Terakhir';
+    if (selectedPreset === 'month') return new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' });
+    if (selectedPreset === 'year') return new Date().getFullYear().toString();
+    return '';
   };
 
   return (
     <View style={[styles.card, { opacity: isLoading ? 0.7 : 1 }]}>
       <View style={styles.header}>
-        <View style={styles.iconBox}>
-          <TrendingUp size={18} color={COLORS.primary} />
+        <View style={[styles.iconBox, { backgroundColor: `${accentColor}15` }]}>
+          <TrendingUp size={18} color={accentColor} />
         </View>
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>Tren Penjualan</Text>
-          <Text style={styles.subtitle}>
-            Total: Rp {totalValue.toLocaleString('id-ID')}
-          </Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>Total: Rp {totalValue.toLocaleString('id-ID')}</Text>
         </View>
       </View>
 
-      {/* ✨ FIXED: Proper centering with alignItems and justifyContent */}
       <View style={styles.chartWrapper}>
         {hasValidData ? (
           <LineChart
-            areaChart
-            curved
+            areaChart curved animateOnDataChange
             data={chartData}
-            width={getChartWidth()}
+            width={width - 80}
             height={180}
-            hideDataPoints={false}
-            dataPointsColor={COLORS.primary}
-            spacing={getSpacing()}
-            color={COLORS.primary}
+            spacing={(width - 80) / (chartData.length + 1)}
+            color={accentColor}
             thickness={3}
-            startFillColor="rgba(20, 158, 136, 0.3)"
-            endFillColor="rgba(20, 158, 136, 0.01)"
+            dataPointsColor={accentColor}
+            startFillColor={`${accentColor}4D`}
+            endFillColor={`${accentColor}03`}
             maxValue={maxValue > 0 ? maxValue * 1.2 : 100}
-            yAxisThickness={0}
-            xAxisThickness={1}
-            xAxisColor="#E5E7EB"
-            hideYAxisText
-            disableScroll
-            animateOnDataChange={true} 
-            animationDuration={500}
+            yAxisThickness={0} xAxisThickness={1} hideYAxisText disableScroll
             pointerConfig={{
-              pointerStripHeight: 180,
-              pointerStripColor: COLORS.primary,
-              pointerStripWidth: 2,
-              strokeDashArray: [4, 4],
-              pointerLabelComponent: (items: any) => {
-                const item = items[0];
-                return (
-                  <View style={styles.tooltipContainer}>
-                    <View style={styles.tooltip}>
-                      <Text style={styles.tooltipDay}>{item.label}</Text>
-                      <Text style={styles.tooltipValue}>
-                        Rp {item.value.toLocaleString('id-ID')}
-                      </Text>
-                    </View>
-                    <View style={styles.tooltipArrow} />
+              pointerStripColor: accentColor,
+              pointerLabelComponent: (items: any) => (
+                <View style={styles.tooltipContainer}>
+                  <View style={styles.tooltip}>
+                    <Text style={styles.tooltipDay}>{items[0].label}</Text>
+                    <Text style={styles.tooltipValue}>Rp {items[0].value.toLocaleString('id-ID')}</Text>
                   </View>
-                );
-              },
+                </View>
+              ),
             }}
             xAxisLabelTextStyle={styles.xAxisText}
           />
         ) : (
           <View style={styles.emptyChart}>
-            {isLoading ? (
-               <ActivityIndicator size="large" color={COLORS.primary} />
-            ) : (
-              <>
-                <Text style={styles.emptyChartText}>Tidak ada data</Text>
-                <Text style={styles.emptyChartSubtext}>Periode ini belum memiliki transaksi</Text>
-              </>
-            )}
+            {isLoading ? <ActivityIndicator size="large" color={accentColor} /> : <Text style={styles.emptyChartText}>Tidak ada data transaksi</Text>}
           </View>
         )}
       </View>
-
       <View style={styles.weekRangeContainer}>
         <Text style={styles.weekRangeText}>Periode: {getPeriodText()}</Text>
       </View>

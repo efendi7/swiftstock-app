@@ -5,38 +5,42 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
-import { X, AlertCircle } from 'lucide-react-native'; 
-import { COLORS } from '../../constants/colors';
-import { auth } from '../../services/firebaseConfig';
-import { useDashboard } from '../../hooks/useDashboard'; 
+import { X } from 'lucide-react-native'; 
+import { COLORS } from '../../../../constants/colors';
+import { auth } from '../../../../services/firebaseConfig';
+import { useDashboard } from '../../../../hooks/useDashboard'; 
 
 // Components
-import { CashierHeader } from '../../components/cashier/CashierHeader';
-import { StatsGrid } from '../../components/dashboard/StatsGrid';
-import { DashboardChart } from '../../components/dashboard/DashboardChart';
-import { ProductRankingCard } from '../../components/dashboard/ProductRankingCard';
-import { RecentActivityCard } from '../../components/dashboard/RecentActivityCard';
+import { CashierDashboardHeader } from './sections/CashierDashboardHeader';
+import { CashierStatsGrid } from './sections/CashierStatsGrid';
+import { CashierDashboardChart } from './sections/CashierDashboardChart';
+import { CashierSalesRanking, CashierStockRanking } from './sections/CashierRankings';
+import { CashierActivity } from './sections/CashierActivity'; // Gunakan komponen yang sudah difilter
 
 const CashierDashboard = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   
-  // Ambil data dari hook
   const { loading, stats, activities, refreshData } = useDashboard();
 
   const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
-  const [currentDisplayName, setCurrentDisplayName] = useState(auth.currentUser?.displayName || 'Kasir');
+  
+  // Ambil nama user secara dinamis dari Auth
+  const [currentDisplayName, setCurrentDisplayName] = useState(
+    auth.currentUser?.displayName || 'Kasir Swiftstock'
+  );
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const HEADER_MAX_HEIGHT = 240 + insets.top;
   const HEADER_MIN_HEIGHT = 75 + insets.top;
 
-  // Sinkronisasi data setiap kali layar difokuskan
   useFocusEffect(
     useCallback(() => {
-      refreshData(); // Ini akan memanggil DashboardService.getPresetDateRange('today') secara default
-      if (auth.currentUser?.displayName) setCurrentDisplayName(auth.currentUser.displayName);
+      refreshData();
+      if (auth.currentUser?.displayName) {
+        setCurrentDisplayName(auth.currentUser.displayName);
+      }
     }, [refreshData])
   );
 
@@ -62,8 +66,7 @@ const CashierDashboard = () => {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* 1. HEADER - Tetap Hari Ini */}
-      <CashierHeader
+      <CashierDashboardHeader
         headerHeight={headerHeight}
         contentOpacity={contentOpacity}
         topPadding={insets.top + 10}
@@ -78,7 +81,7 @@ const CashierDashboard = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ 
           paddingTop: HEADER_MAX_HEIGHT + 15, 
-          paddingBottom: 40 + insets.bottom, 
+          paddingBottom: 100 + insets.bottom, 
           paddingHorizontal: 20 
         }}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: false })}
@@ -92,27 +95,19 @@ const CashierDashboard = () => {
           />
         }
       >
-        {/* Indikator Laporan Hari Ini
-        <View style={styles.todayBadge}>
-          <Text style={styles.todayText}>Laporan Operasional Hari Ini</Text>
-        </View> */}
-
         <View style={styles.loadingWrapper}>
           {loading && !refreshing && <ActivityIndicator size="small" color={COLORS.secondary} />}
         </View>
 
         <View style={styles.contentWrapper}>
-          {/* 2. STATS GRID - Menampilkan performa stok hari ini */}
-          <StatsGrid
+          <CashierStatsGrid
             totalProducts={stats.totalProducts}
-            totalIn={stats.totalIn}
             totalOut={stats.totalOut} 
             dateLabel="Hari ini"
           />
 
-          {/* 3. CHART - Tren penjualan per jam (Hari ini) */}
           <View style={styles.chartWrapper}>
-            <DashboardChart 
+            <CashierDashboardChart
               data={stats.weeklyData} 
               isLoading={loading} 
               selectedPreset="today" 
@@ -120,48 +115,46 @@ const CashierDashboard = () => {
           </View>
 
           <View style={styles.rankingSection}>
-            {/* 4. RANKING PENJUALAN - Produk laku hari ini */}
-            <ProductRankingCard 
-              title="Produk Terlaris Hari Ini" 
+            {/* PERBAIKAN: Hanya kirim data dan onSeeMore agar tidak error IntrinsicAttributes */}
+            <CashierSalesRanking
               data={stats.salesRanking || []} 
-              unit="Terjual" 
-              color={COLORS.secondary} 
+              onSeeMore={() => navigation.navigate('Product', { filterType: 'sold-desc' })}
             />
 
-            {/* 5. RANKING STOK - Dimunculkan kembali untuk kontrol inventori */}
-            <ProductRankingCard 
-              title="Peringatan Stok Rendah" 
+            <CashierStockRanking
               data={stats.stockRanking || []} 
-              unit="Sisa" 
-              color="#ef4444" // Merah untuk peringatan
-              onSeeMore={() => {
-    // Navigasikan ke layar Inventori atau buka modal khusus stok
-    navigation.navigate('Inventory'); 
-  }}
+              onSeeMore={() => navigation.navigate('Inventory')}
             />
 
-            {/* 6. AKTIVITAS TERBARU */}
-            <RecentActivityCard 
-              activities={activities.slice(0, 5)} 
+            {/* PERBAIKAN: Gunakan CashierActivity untuk handle logika filter "Anda" dan "Admin" */}
+            <CashierActivity 
+              activities={activities} 
+              currentUserName={currentDisplayName}
               onSeeMore={() => setModalVisible(true)} 
             />
           </View>
         </View>
 
-        <Text style={styles.footerBrand}>SwiftPay Ecosystem • 2025</Text>
+        <Text style={styles.footerBrand}>Swiftstock by Efendi • 2025</Text>
       </Animated.ScrollView>
 
-      {/* MODAL RIWAYAT */}
+      {/* MODAL RIWAYAT LENGKAP KASIR */}
       <Modal animationType="slide" transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Riwayat Aktivitas</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}><X size={24} color={COLORS.textDark} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => setModalVisible(false)}>
+                <X size={24} color={COLORS.textDark} />
+              </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={{ padding: 20 }}>
-                <RecentActivityCard activities={activities} onSeeMore={() => {}} />
+                {/* Gunakan komponen yang sama di dalam modal */}
+                <CashierActivity 
+                  activities={activities} 
+                  currentUserName={currentDisplayName}
+                />
               </View>
             </ScrollView>
           </View>
@@ -173,21 +166,6 @@ const CashierDashboard = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  todayBadge: {
-    backgroundColor: '#F0F9FF',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    alignSelf: 'flex-start',
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#BAE6FD',
-  },
-  todayText: {
-    color: '#0369A1',
-    fontSize: 11,
-    fontFamily: 'PoppinsMedium',
-  },
   loadingWrapper: { height: 10, justifyContent: 'center', alignItems: 'center', marginVertical: 4 },
   contentWrapper: { marginTop: 0 },
   chartWrapper: { marginTop: 10, minHeight: 220 },

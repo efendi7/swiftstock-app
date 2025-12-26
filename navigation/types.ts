@@ -1,10 +1,17 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
 
 export type RootStackParamList = {
+  // Tambahkan Onboarding di sini
+  Onboarding: undefined; 
+  
   Login: undefined;
   Register: undefined;
-  AdminTabs: NavigatorScreenParams<AdminTabParamList>; // Links the Tab types
-  CashierTabs: NavigatorScreenParams<CashierTabParamList>; // Links the Tab types
+  
+  // NavigatorScreenParams digunakan untuk navigasi antar nested navigator
+  AdminTabs: NavigatorScreenParams<AdminTabParamList>; 
+  CashierTabs: NavigatorScreenParams<CashierTabParamList>; 
+  
+  // Screen mandiri (Full Screen)
   Cashier: undefined;     
 };
 

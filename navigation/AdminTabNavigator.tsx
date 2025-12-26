@@ -1,8 +1,8 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 
-import AdminDashboard from '../screens/Main/AdminDashboard';
-import ProductScreen from '../screens/Main/ProductScreen';
+import AdminDashboard from '../screens/Main/dashboard/admin/AdminDashboard';
+import ProductScreen from '../screens/Main/product/ProductScreen';
 import TransactionScreen from '../screens/Main/TransactionScreen';
 // import ProfileScreen from '../screens/Main/ProfileScreen';
 

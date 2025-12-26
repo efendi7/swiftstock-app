@@ -4,11 +4,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
 import { History, BarChart3 } from 'lucide-react-native';
 
-import { db, auth } from '../../services/firebaseConfig';
-import { ScreenHeader } from '../../components/common/ScreenHeader';
-import { TransactionFilterSection, TransactionList } from '../../components/transactions';
-import { FilterMode, SortType, Transaction } from '../../types/transaction.type';
-import { COLORS } from '../../constants/colors';
+import { db, auth } from '../../../services/firebaseConfig';
+import { ScreenHeader } from '../../../components/common/ScreenHeader';
+import { TransactionFilterSection, TransactionList } from '../../../components/transactions';
+import { FilterMode, SortType, Transaction } from '../../../types/transaction.type';
+import { COLORS } from '../../../constants/colors';
 
 const TransactionScreen = () => {
   const insets = useSafeAreaInsets();

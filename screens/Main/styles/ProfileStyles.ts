@@ -9,6 +9,34 @@ export const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 30,
   },
+  // Tambahkan di dalam styles = StyleSheet.create({ ... })
+migrationItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingVertical: 15,
+  paddingHorizontal: 12,
+  borderTopWidth: 1,
+  borderTopColor: '#F1F5F9',
+  marginTop: 5,
+},
+migrationLeft: {
+  flexDirection: 'row',
+  alignItems: 'center',
+},
+migrationTextContent: {
+  marginLeft: 15,
+},
+migrationLabel: {
+  fontSize: 14,
+  fontFamily: 'PoppinsSemiBold',
+  color: COLORS.textDark,
+},
+migrationSub: {
+  fontSize: 11,
+  fontFamily: 'PoppinsRegular',
+  color: COLORS.textLight,
+},
   
   // Header Section
   header: {

@@ -3,13 +3,15 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // Import ini
 
 import { auth } from '../services/firebaseConfig';
 import LoginScreen from '../screens/Auth/LoginScreen';
 import RegisterScreen from '../screens/Auth/RegisterScreen';
-import CashierScreen from '../screens/Main/CashierScreen';
+import CashierScreen from '../screens/Main/transaction/CashierScreen';
+import { OnboardingScreen } from '../screens/onboarding'; // Import ini
 import AdminTabsLayout from './AdminTabsLayout';
-import CashierTabsLayout from './CashierTabsLayout'; // Import ini
+import CashierTabsLayout from './CashierTabsLayout';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -18,12 +20,21 @@ const AppNavigator = () => {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<'admin' | 'kasir' | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null); // State Onboarding
 
   useEffect(() => {
+    // 1. Cek status Onboarding
+    const checkOnboarding = async () => {
+      const value = await AsyncStorage.getItem('@alreadyLaunched');
+      setIsFirstLaunch(value === null); // true jika belum ada data
+    };
+
+    checkOnboarding();
+
+    // 2. Cek status Firebase Auth
     const unsub = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         const token = await currentUser.getIdTokenResult();
-        // Fallback ke 'kasir' jika claim role tidak ada
         setRole((token.claims.role as 'admin' | 'kasir') ?? 'kasir');
         setUser(currentUser);
       } else {
@@ -32,10 +43,12 @@ const AppNavigator = () => {
       }
       setLoading(false);
     });
+
     return unsub;
   }, []);
 
-  if (loading) {
+  // Tampilkan Loading jika status onboarding atau auth belum siap
+  if (loading || isFirstLaunch === null) {
     return (
       <View style={styles.loading}>
         <ActivityIndicator size="large" color="#00A79D" />
@@ -48,6 +61,10 @@ const AppNavigator = () => {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <>
+            {/* Tampilkan Onboarding HANYA jika isFirstLaunch = true */}
+            {isFirstLaunch && (
+              <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            )}
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Register" component={RegisterScreen} />
           </>
@@ -55,9 +72,7 @@ const AppNavigator = () => {
           <Stack.Screen name="AdminTabs" component={AdminTabsLayout} />
         ) : (
           <>
-            {/* Jalur Kasir menggunakan Tab Layout */}
             <Stack.Screen name="CashierTabs" component={CashierTabsLayout} />
-            {/* Screen jualan/scan tetap di Stack agar Full Screen */}
             <Stack.Screen name="Cashier" component={CashierScreen} />
           </>
         )}

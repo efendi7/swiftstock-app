@@ -4,14 +4,14 @@ import {
   Alert, ActivityIndicator, SafeAreaView, StatusBar, Platform, Modal, Image
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, db } from '../../services/firebaseConfig';
-import { handleCheckoutProcess } from '../../services/transactionService';
+import { auth, db } from '../../../services/firebaseConfig';
+import { handleCheckoutProcess } from '../../../services/transactionService';
 import { 
   Scan, Trash2, Plus, Minus, CreditCard, PackageOpen, Lightbulb, X, Banknote, QrCode 
 } from 'lucide-react-native';
-import { COLORS } from '../../constants/colors';
-import { ScreenHeader } from '../../components/common/ScreenHeader';
-import { RoundedContentScreen } from '../../components/common/RoundedContentScreen';
+import { COLORS } from '../../../constants/colors';
+import { ScreenHeader } from '../../../components/common/ScreenHeader';
+import { RoundedContentScreen } from '../../../components/common/RoundedContentScreen';
 import BarcodeScannerScreen from './BarcodeScannerScreen';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 
@@ -35,7 +35,6 @@ const CashierScreen = () => {
   const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
 
-  // State untuk Modal Pembayaran
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
   const [cashAmount, setCashAmount] = useState('');
@@ -297,7 +296,7 @@ const CashierScreen = () => {
               ) : (
                 <View style={styles.qrisContainer}>
                   <Image 
-                    source={require('../../assets/images/qris.png')} // Pastikan file tersedia
+                    source={require('../../../assets/images/qris.png')} // Pastikan file tersedia
                     style={styles.qrisImage}
                     resizeMode="contain"
                   />

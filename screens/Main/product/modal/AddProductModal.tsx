@@ -4,12 +4,12 @@ import {
   TouchableWithoutFeedback, Dimensions, KeyboardAvoidingView, Platform, Alert
 } from 'react-native';
 
-import { COLORS } from '../../../constants/colors';
-import { useProductForm } from '../../../hooks/useProductForm';
-import { ProductFormHeader } from '../../../components/addproduct/ProductFormHeader';
-import { ProductFormFields } from '../../../components/addproduct/ProductFormFields';
-import { SubmitButton } from '../../../components/addproduct/SubmitButton';
-import BarcodeScannerScreen from '../BarcodeScannerScreen';
+import { COLORS } from '../../../../constants/colors';
+import { useProductForm } from '../../../../hooks/useProductForm';
+import { ProductFormHeader } from '../../../../components/addproduct/ProductFormHeader';
+import { ProductFormFields } from '../../../../components/addproduct/ProductFormFields';
+import { SubmitButton } from '../../../../components/addproduct/SubmitButton';
+import BarcodeScannerScreen from '../../transaction/BarcodeScannerScreen';
 
 const { height } = Dimensions.get('window');
 const MAX_MODAL_HEIGHT = height * 0.9; // Sedikit lebih tinggi untuk kenyamanan input

@@ -3,10 +3,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import CashierDashboard from '../screens/Main/CashierDashboard';
-import TransactionScreen from '../screens/Main/TransactionScreen';
-import ProductScreen from '../screens/Main/ProductScreen';
-import ProfileScreen from '../screens/Main/ProfileScreen'; // Pastikan ini diimport
+import CashierDashboard from '../screens/Main/dashboard/cashier/CashierDashboard';
+import TransactionScreen from '../screens/Main/transaction/TransactionScreen';
+import ProductScreen from '../screens/Main/product/ProductScreen';
+import ProfileScreen from '../screens/Main/profile/ProfileScreen'; // Pastikan ini diimport
 import { BottomNavigation } from '../components/dashboard/BottomNavigation';
 import { CashierTabParamList, RootStackParamList } from './types';
 
