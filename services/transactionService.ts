@@ -117,21 +117,36 @@ export const handleCheckoutProcess = async (
         }))
       });
 
-      // 5. Simpan Log Aktivitas
+      // 5. Simpan Log Aktivitas dengan detail lengkap
       const activityRef = doc(collection(db, 'activities'));
       const totalQty = cartItems.reduce((sum, item) => sum + item.qty, 0);
-      const productList = cartItems.map(item => `${item.qty} unit "${item.name}"`).join(', ');
-      const formattedPrice = `Rp ${total.toLocaleString('id-ID')}`;
       
-      let message = `Kasir Checkout total ${totalQty} produk yaitu ${productList} via ${paymentMethod.toUpperCase()} seharga ${formattedPrice}`;
-      if (paymentMethod === 'cash' && changeAmount > 0) {
-        message += ` dengan kembalian Rp ${changeAmount.toLocaleString('id-ID')}`;
+      // Format detail produk yang dibeli
+      const productDetails = cartItems.map(item => 
+        `${item.qty}x ${item.name} (@ Rp ${item.price.toLocaleString('id-ID')})`
+      ).join(', ');
+      
+      const formattedTotal = `Rp ${total.toLocaleString('id-ID')}`;
+      const paymentMethodText = paymentMethod === 'cash' ? 'Tunai' : 'QRIS';
+      
+      let message = `Penjualan ${transactionNumber}: ${productDetails} - Total ${formattedTotal} via ${paymentMethodText}`;
+      
+      // Tambahkan info uang tunai dan kembalian jika cash
+      if (paymentMethod === 'cash') {
+        message += ` (Bayar: Rp ${cashAmount.toLocaleString('id-ID')}`;
+        if (changeAmount > 0) {
+          message += `, Kembalian: Rp ${changeAmount.toLocaleString('id-ID')}`;
+        }
+        message += ')';
       }
 
       transaction.set(activityRef, {
-        type: 'OUT',
+        type: 'KELUAR',
         message: message,
         userName: user.displayName || user.email?.split('@')[0] || 'Kasir',
+        transactionNumber: transactionNumber, // Simpan nomor transaksi untuk referensi
+        totalAmount: total,
+        totalItems: totalQty,
         createdAt: serverTimestamp(),
       });
 

@@ -4,7 +4,7 @@ import { DashboardStats, DateRange } from '../types/dashboard.types';
 
 export const useDashboard = () => {
   const [loading, setLoading] = useState(false);
-  const [activities, setActivities] = useState<any[]>([]); // Tambah state aktivitas
+  const [activities, setActivities] = useState<any[]>([]);
   const [stats, setStats] = useState<DashboardStats>({
     totalProducts: 0, 
     totalTransactions: 0, 
@@ -24,6 +24,31 @@ export const useDashboard = () => {
   );
   const [selectedPreset, setSelectedPreset] = useState<'today' | 'week' | 'month' | 'year'>('today');
 
+  // ============================================
+  // REAL-TIME LISTENER UNTUK ACTIVITIES
+  // ============================================
+  useEffect(() => {
+    console.log('🔥 Setting up real-time activity listener...');
+    
+    // Subscribe ke aktivitas secara real-time
+    const unsubscribe = DashboardService.subscribeToRecentActivities(
+      20, // Ambil 20 aktivitas terbaru
+      (newActivities) => {
+        console.log('📡 Real-time activities update:', newActivities.length);
+        setActivities(newActivities);
+      }
+    );
+
+    // Cleanup saat hook unmount
+    return () => {
+      console.log('🧹 Cleaning up activity listener...');
+      unsubscribe();
+    };
+  }, []); // Empty dependency - listener tetap aktif sepanjang lifecycle
+
+  // ============================================
+  // REFRESH DATA (STATS ONLY)
+  // ============================================
   const refreshData = useCallback(async (
     customRange?: DateRange, 
     preset?: 'today' | 'week' | 'month' | 'year'
@@ -33,14 +58,9 @@ export const useDashboard = () => {
       const targetRange = customRange || dateRange;
       const targetPreset = preset || selectedPreset;
       
-      // Ambil Stats dan Aktivitas secara paralel
-      const [data, recentActs] = await Promise.all([
-        DashboardService.fetchDashboardStats(targetRange, targetPreset),
-        DashboardService.fetchRecentActivities(20) // Ambil 20 aktivitas terbaru
-      ]);
+      const data = await DashboardService.fetchDashboardStats(targetRange, targetPreset);
 
       setStats(data);
-      setActivities(recentActs);
       
       if (customRange) setDateRange(customRange);
       if (preset) setSelectedPreset(preset);
@@ -56,6 +76,7 @@ export const useDashboard = () => {
     refreshData(range, preset);
   }, [refreshData]);
 
+  // Initial load
   useEffect(() => { 
     refreshData(); 
   }, []);
@@ -63,7 +84,7 @@ export const useDashboard = () => {
   return { 
     loading, 
     stats, 
-    activities, // Ekspos activities ke UI
+    activities, // Real-time activities
     dateRange, 
     selectedPreset, 
     refreshData, 

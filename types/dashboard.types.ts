@@ -28,7 +28,7 @@ export interface DashboardStats {
   dateRange?: DateRange;
   stockRanking: ProductStat[];
   salesRanking: ProductStat[];
-  // TAMBAHKAN DUA BARIS INI:
-  userName?: string;    // Properti nama user
-  photoURL?: string | null; // Properti foto user
+  dateRangeLabel?: string;  // ✨ TAMBAHKAN INI untuk label chart
+  userName?: string;
+  photoURL?: string | null;
 }

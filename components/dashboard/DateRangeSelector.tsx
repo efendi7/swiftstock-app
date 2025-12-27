@@ -1,6 +1,3 @@
-// ====================================
-// 4. components/DateRangeSelector.tsx
-// ====================================
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Calendar } from 'lucide-react-native';
@@ -19,9 +16,9 @@ export const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({
 }) => {
   const presets = [
     { key: 'today', label: 'Hari Ini' },
-    { key: 'week', label: 'Minggu Ini' },
-    { key: 'month', label: 'Bulan Ini' },
-    { key: 'year', label: 'Tahun Ini' },
+    { key: 'week', label: 'Minggu' },
+    { key: 'month', label: 'Bulan' },
+    { key: 'year', label: 'Tahun' },
   ];
 
   return (
@@ -50,7 +47,7 @@ export const DateRangeSelector: React.FC<DateRangeSelectorProps> = ({
       
       {onCustomPress && (
         <TouchableOpacity style={styles.customButton} onPress={onCustomPress}>
-          <Calendar size={16} color={COLORS.secondary} />
+          <Calendar size={14} color={COLORS.secondary} />
           <Text style={styles.customText}>Custom</Text>
         </TouchableOpacity>
       )}
@@ -65,13 +62,13 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     marginBottom: 6,
   },
   presetButton: {
     flex: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderRadius: 8,
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -83,7 +80,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.secondary,
   },
   presetText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'PoppinsRegular',
     color: COLORS.textLight,
   },
@@ -95,16 +92,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     borderRadius: 8,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: COLORS.secondary,
-    gap: 6,
+    gap: 5,
   },
   customText: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: 'PoppinsMedium',
     color: COLORS.secondary,
   },

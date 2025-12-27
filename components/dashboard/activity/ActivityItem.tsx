@@ -13,12 +13,38 @@ interface ActivityItemProps {
 export const ActivityItem = memo(({ activity, isLast, currentUserName }: ActivityItemProps) => {
   const isMe = activity.userName === currentUserName;
   const displayName = isMe ? 'Anda' : activity.userName;
+  const title = getActivityTitle(activity.type, activity.message);
+
+  const getTitleStyle = () => {
+    // BIRU untuk Produk Baru
+    if (title === 'PRODUK BARU') {
+      return { color: '#3B82F6' }; // Blue
+    }
+    
+    // HIJAU untuk Stok Masuk
+    if (title === 'STOK MASUK') {
+      return { color: '#10B981' }; // Green
+    }
+    
+    // ORANYE untuk Update Data (Harga, Kategori, Nama, Supplier)
+    if (title.includes('UPDATE')) {
+      return { color: '#F59E0B' }; // Amber/Orange
+    }
+    
+    // MERAH untuk Pengurangan/Penjualan
+    if (title === 'PENJUALAN' || title === 'STOK KELUAR') {
+      return { color: '#EF4444' }; // Red
+    }
+    
+    // Default
+    return { color: COLORS.primary };
+  };
 
   return (
     <View style={[styles.activityItem, isLast && styles.lastItem]}>
       <View style={styles.activityContent}>
-        <Text style={styles.activityTitle}>
-          {getActivityTitle(activity.type, activity.message)}
+        <Text style={[styles.activityTitle, getTitleStyle()]}>
+          {title}
         </Text>
         
         <Text style={styles.activityMessage}>
@@ -44,12 +70,42 @@ export const ActivityItem = memo(({ activity, isLast, currentUserName }: Activit
 });
 
 const styles = StyleSheet.create({
-  activityItem: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F5F5F5' },
-  lastItem: { borderBottomWidth: 0, paddingBottom: 5 },
-  activityContent: { flex: 1 },
-  activityTitle: { fontSize: 12, fontFamily: 'PoppinsSemiBold', color: COLORS.textDark, marginBottom: 2 },
-  activityMessage: { fontSize: 11, color: '#444', lineHeight: 16, fontFamily: 'PoppinsRegular' },
-  timestamp: { fontSize: 10, color: '#999', marginTop: 4, fontFamily: 'PoppinsRegular' },
-  productText: { fontFamily: 'PoppinsBold', color: COLORS.primary },
-  secondaryBold: { fontFamily: 'PoppinsBold', color: COLORS.secondary }
+  activityItem: { 
+    paddingVertical: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#F5F5F5' 
+  },
+  lastItem: { 
+    borderBottomWidth: 0, 
+    paddingBottom: 5 
+  },
+  activityContent: { 
+    flex: 1 
+  },
+  activityTitle: { 
+    fontSize: 10, 
+    fontFamily: 'PoppinsBold', 
+    marginBottom: 2, 
+    letterSpacing: 0.8 
+  },
+  activityMessage: { 
+    fontSize: 12, 
+    color: '#444', 
+    lineHeight: 18, 
+    fontFamily: 'PoppinsRegular' 
+  },
+  timestamp: { 
+    fontSize: 10, 
+    color: '#999', 
+    marginTop: 4, 
+    fontFamily: 'PoppinsRegular' 
+  },
+  productText: { 
+    fontFamily: 'PoppinsBold', 
+    color: '#1E293B' 
+  },
+  secondaryBold: { 
+    fontFamily: 'PoppinsBold', 
+    color: COLORS.secondary 
+  }
 });

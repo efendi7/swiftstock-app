@@ -15,16 +15,13 @@ export const AdminActivity: React.FC<AdminActivityProps> = ({
   currentUserName = "Admin" 
 }) => {
   return (
-    /* PENTING: Menghapus SafeAreaView dan ScrollView agar Card tidak terhimpit padding tambahan. 
-       Card akan mengikuti lebar container dashboard Anda secara otomatis.
-    */
     <View style={{ width: '100%' }}>
-        < BaseRecentActivity
-          activities={activities} 
-          currentUserName={currentUserName}
-          title="Log Aktivitas Toko"
-          onSeeMore={onSeeMore}
-        />
+      <BaseRecentActivity
+        activities={activities} // ✅ Hanya 5 aktivitas untuk preview
+        currentUserName={currentUserName}
+        title="Log Aktivitas Toko"
+        onSeeMore={onSeeMore} // ✅ Handler untuk buka modal
+      />
     </View>
   );
 };

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductService } from '../services/productService';
-import { ProductFormData } from '../models/Product';
+import { ProductFormData } from '../types/product.types'; // Pastikan path benar
 
 export const useProductForm = (onSuccess: () => void, productId?: string) => {
   const [formData, setFormData] = useState<ProductFormData>({
@@ -15,23 +15,32 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
     category: '',
     imageUrl: ''
   });
+
+  // State untuk menyimpan data asli (Original) dari database
+  const [originalData, setOriginalData] = useState<any>(null);
+  
   const [loading, setLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
-  const [initialStock, setInitialStock] = useState(0);
 
   const updateField = useCallback((field: keyof ProductFormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  /**
-   * PERBAIKAN UTAMA: Menggunakan useCallback 
-   * Ini mencegah loop render saat dipanggil di useEffect EditProductModal
-   */
+  // Memuat data awal saat modal edit dibuka
   const setInitialData = useCallback((data: ProductFormData, existingImageUri: string | null) => {
     setFormData(data);
     setImageUri(existingImageUri);
-    setInitialStock(parseInt(data.stock) || 0);
+    
+    // SIMPAN DATA ASLI DI SINI untuk perbandingan saat update
+    setOriginalData({
+      name: data.name,
+      stock: parseInt(data.stock) || 0,
+      price: parseFloat(data.price) || 0,
+      purchasePrice: parseFloat(data.purchasePrice) || 0,
+      category: data.category || '',
+      supplier: data.supplier || ''
+    });
   }, []);
 
   const generateBarcode = useCallback((type: 'EAN13' | 'CODE128') => {
@@ -47,29 +56,21 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
       if (status !== 'granted') {
-        Alert.alert(
-          'Izin Diperlukan',
-          'Aplikasi memerlukan izin akses galeri untuk memilih foto produk.',
-          [{ text: 'OK' }]
-        );
+        Alert.alert('Izin Diperlukan', 'Aplikasi memerlukan izin akses galeri.');
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
-
       if (!result.canceled && result.assets && result.assets[0]) {
         setImageUri(result.assets[0].uri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
-      Alert.alert('Error', 'Gagal memilih gambar. Silakan coba lagi.');
     }
   };
 
@@ -80,17 +81,11 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
 
   const resetForm = useCallback(() => {
     setFormData({
-      name: '', 
-      price: '', 
-      purchasePrice: '', 
-      stock: '',
-      barcode: '', 
-      supplier: '', 
-      category: '', 
-      imageUrl: ''
+      name: '', price: '', purchasePrice: '', stock: '',
+      barcode: '', supplier: '', category: '', imageUrl: ''
     });
     setImageUri(null);
-    setInitialStock(0);
+    setOriginalData(null);
   }, []);
 
   const handleSubmit = async () => {
@@ -99,7 +94,6 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
     try {
       let finalData = { ...formData };
       
-      // Upload gambar baru jika ada perubahan (uri lokal/file)
       if (imageUri && !imageUri.startsWith('http')) {
         const uploadedUrl = await ProductService.uploadImage(imageUri);
         finalData.imageUrl = uploadedUrl;
@@ -108,7 +102,10 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
       }
       
       if (productId) {
-        await ProductService.updateProduct(productId, finalData, initialStock);
+        // PERBAIKAN: Kirim originalData (objek), bukan hanya initialStock (number)
+        if (!originalData) throw new Error("Data asli tidak ditemukan.");
+        
+        await ProductService.updateProduct(productId, finalData, originalData);
         Alert.alert('Berhasil', 'Produk berhasil diperbarui');
       } else {
         await ProductService.addProduct(finalData);
@@ -125,18 +122,9 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
   };
 
   return {
-    formData, 
-    loading, 
-    showScanner, 
-    imageUri,
-    updateField, 
-    generateBarcode, 
-    handleBarcodeScanned,
-    handleSubmit, 
-    setShowScanner, 
-    pickImage, 
-    removeImage, 
-    resetForm,
+    formData, loading, showScanner, imageUri,
+    updateField, generateBarcode, handleBarcodeScanned,
+    handleSubmit, setShowScanner, pickImage, removeImage, resetForm,
     setInitialData
   };
 };

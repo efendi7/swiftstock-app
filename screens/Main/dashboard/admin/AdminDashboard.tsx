@@ -7,19 +7,14 @@ import {
   StatusBar, 
   ActivityIndicator, 
   RefreshControl,
-  Modal,
-  ScrollView,
-  TouchableOpacity
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { X } from 'lucide-react-native';
 import { COLORS } from '../../../../constants/colors';
 
 // Import Firebase Auth untuk sinkronisasi profil real-time
 import { auth } from '../../../../services/firebaseConfig';
 import { useDashboard } from '../../../../hooks/useDashboard';
-
 
 import { AdminDashboardHeader } from './sections/AdminDashboardHeader';
 import { AdminStatsGrid } from './sections/AdminStatsGrid';
@@ -27,6 +22,7 @@ import { AdminDashboardChart } from './sections/AdminDashboardChart';
 import { DateRangeSelector } from '../../../../components/dashboard/DateRangeSelector';
 import { AdminSalesRanking, AdminStockRanking  } from './sections/AdminRankings';
 import { AdminActivity } from './sections/AdminActivity';
+import { ActivityModal } from '../admin/modal/ActivityModal'; // ✅ Import modal baru
 
 const AdminDashboard = () => {
   const insets = useSafeAreaInsets();
@@ -42,7 +38,7 @@ const AdminDashboard = () => {
   } = useDashboard();
   
   const [refreshing, setRefreshing] = useState(false);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false); // ✅ State untuk modal
   const scrollY = useRef(new Animated.Value(0)).current;
 
   // State lokal untuk nama agar reaktif terhadap perubahan di profil
@@ -158,35 +154,37 @@ const AdminDashboard = () => {
           />
 
           <View style={styles.chartWrapper}>
-            <AdminDashboardChart 
-              data={stats.weeklyData} 
-              isLoading={loading}
-              selectedPreset={selectedPreset}
-            />
-          </View>
+  <AdminDashboardChart 
+    data={stats.weeklyData}
+    isLoading={loading}
+    selectedPreset={selectedPreset}
+    dateRangeLabel={stats?.dateRangeLabel}   // ⬅⬅ WAJIB
+  />
+</View>
+
 
           <View style={styles.rankingSection}>
             <AdminSalesRanking 
-    title="Produk Terlaris Hari Ini" 
-    data={stats.salesRanking || []} 
-    unit="Terjual" 
-    color={COLORS.secondary} 
-    // Navigasi ke Product dengan parameter filter Terlaris
-    onSeeMore={() => navigation.navigate('Product', { filterType: 'sold-desc' })} 
-  />
+              title="Produk Terlaris Hari Ini" 
+              data={stats.salesRanking || []} 
+              unit="Terjual" 
+              color={COLORS.secondary} 
+              onSeeMore={() => navigation.navigate('Product', { filterType: 'sold-desc' })} 
+            />
 
-  <AdminStockRanking 
-    title="Peringatan Stok Rendah" 
-    data={stats.stockRanking || []} 
-    unit="Sisa" 
-    color="#ef4444" 
-    // Navigasi ke Product dengan parameter filter Kritis
-    onSeeMore={() => navigation.navigate('Product', { filterType: 'stock-critical' })} 
-  />
+            <AdminStockRanking 
+              title="Peringatan Stok Rendah" 
+              data={stats.stockRanking || []} 
+              unit="Sisa" 
+              color="#ef4444" 
+              onSeeMore={() => navigation.navigate('Product', { filterType: 'stock-critical' })} 
+            />
 
+            {/* ✅ Hanya tampilkan 5 aktivitas di card */}
             <AdminActivity 
               activities={activities.slice(0, 5)}
-              onSeeMore={() => setModalVisible(true)}
+              currentUserName={currentDisplayName}
+              onSeeMore={() => setModalVisible(true)} // ✅ Buka modal
             />
           </View>
         </View>
@@ -194,32 +192,12 @@ const AdminDashboard = () => {
         <Text style={styles.footerBrand}>Swiftstock by Efendi • 2025</Text>
       </Animated.ScrollView>
 
-      {/* MODAL RIWAYAT LENGKAP */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      {/* ✅ MODAL DENGAN PAGINATION */}
+      <ActivityModal
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { paddingTop: insets.top + 20 }]}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Riwayat Aktivitas</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)}>
-                <X size={24} color={COLORS.textDark} />
-              </TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <View style={{ padding: 20 }}>
-                <AdminActivity
-                  activities={activities}
-                  onSeeMore={() => {}}
-                />
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+        onClose={() => setModalVisible(false)}
+        currentUserName={currentDisplayName}
+      />
     </View>
   );
 };
@@ -251,31 +229,6 @@ const styles = StyleSheet.create({
     fontSize: 11, 
     marginTop: 40, 
     fontFamily: 'PoppinsRegular' 
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: COLORS.background,
-    borderTopLeftRadius: 30,
-    borderTopRightRadius: 30,
-    height: '85%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontFamily: 'PoppinsBold',
-    color: COLORS.textDark,
   },
 });
 
