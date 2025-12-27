@@ -7,7 +7,7 @@ import CashierDashboard from '../screens/Main/dashboard/cashier/CashierDashboard
 import TransactionScreen from '../screens/Main/transaction/TransactionScreen';
 import ProductScreen from '../screens/Main/product/ProductScreen';
 import ProfileScreen from '../screens/Main/profile/ProfileScreen'; // Pastikan ini diimport
-import { BottomNavigation } from '../components/dashboard/BottomNavigation';
+import { BottomNavigation } from '../components/common/BottomNavigation';
 import { CashierTabParamList, RootStackParamList } from './types';
 
 const Tab = createBottomTabNavigator<CashierTabParamList>();

@@ -9,7 +9,7 @@ import TransactionScreen from '../screens/Main/transaction/TransactionScreen';
 import ProfileScreen from '../screens/Main/profile/ProfileScreen'; 
 
 import { AdminTabParamList } from './types';
-import { BottomNavigation } from '../components/dashboard/BottomNavigation';
+import { BottomNavigation } from '../components/common/BottomNavigation';
 import AddProductModal from '../screens/Main/product/modal/AddProductModal';
 
 const Tab = createBottomTabNavigator<AdminTabParamList>();

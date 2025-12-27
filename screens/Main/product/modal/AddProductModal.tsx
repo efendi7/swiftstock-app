@@ -12,7 +12,7 @@ import { SubmitButton } from '../../../../components/addproduct/SubmitButton';
 import BarcodeScannerScreen from '../../transaction/BarcodeScannerScreen';
 
 const { height } = Dimensions.get('window');
-const MAX_MODAL_HEIGHT = height * 0.9; // Sedikit lebih tinggi untuk kenyamanan input
+const MAX_MODAL_HEIGHT = height * 0.9;
 
 interface AddProductModalProps {
   visible: boolean;

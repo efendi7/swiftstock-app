@@ -1,31 +1,35 @@
 {
   "expo": {
-    "name": "PosAppReactNative",
-    "slug": "PosAppReactNative",
+    "name": "SwiftStock",
+    "slug": "swiftstock-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "icon": "./assets/login.png",
+    "icon": "./assets/swiftstock.png", 
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "android": {
       "permissions": [
-        "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "CAMERA",
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO"
+        "CAMERA"
       ],
-      "package": "com.anonymous.PosAppReactNative"
+      "package": "com.efendi7.swiftstock"
     },
     "plugins": [
       [
         "expo-camera",
         {
-          "cameraPermission": "Izinkan aplikasi mengakses kamera untuk scan barcode produk."
+          "cameraPermission": "Izinkan SwiftStock mengakses kamera untuk scan barcode produk."
         }
-      ],
-      "expo-font"
-    ]
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8546c331-3c3a-4ca4-8fca-094f500b17f1"
+      }
+    }
   }
 }

@@ -9,6 +9,7 @@ interface BaseStatsGridProps {
   containerStyle?: 'card' | 'flat';
 }
 
+// Add 'export' here
 export const BaseStatsGrid: React.FC<BaseStatsGridProps> = ({
   isLoading = false,
   renderHeader,

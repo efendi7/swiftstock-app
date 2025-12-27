@@ -12,6 +12,7 @@ interface StatCardProps {
   height?: number;
 }
 
+// Add 'export' here
 export const StatCard: React.FC<StatCardProps> = ({ 
   icon, iconBgColor, value, label, width, height = 70 
 }) => (

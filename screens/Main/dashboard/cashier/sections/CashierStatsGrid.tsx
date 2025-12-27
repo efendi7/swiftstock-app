@@ -2,7 +2,9 @@ import React from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Package, ArrowUpRight, ClipboardList } from 'lucide-react-native';
 import { COLORS } from '../../../../../constants/colors';
-import { BaseStatsGrid, StatCard } from '../../../../../components/dashboard/stats';
+// Import langsung dari file component (bukan dari index.ts)
+import { BaseStatsGrid } from '../../../../../components/dashboard/stats/BaseStatsGrid';
+import { StatCard } from '../../../../../components/dashboard/stats/StatCard';
 
 const { width } = Dimensions.get('window');
 const PADDING_SCREEN = 40;
