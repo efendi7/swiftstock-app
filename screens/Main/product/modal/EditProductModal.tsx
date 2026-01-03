@@ -6,11 +6,14 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { X, Save, Edit3, Lock } from 'lucide-react-native';
+import { doc, updateDoc, addDoc, collection, serverTimestamp } from 'firebase/firestore';
 
 import { COLORS } from '../../../../constants/colors';
+import { db } from '../../../../services/firebaseConfig';
 import { useProductForm } from '../../../../hooks/useProductForm';
 import { ProductFormFields } from '../../../../components/addproduct/ProductFormFields';
 import { AddCategoryModal } from './AddCategoryModal';
+import { StockOpnameModal } from './StockOpnameModal';
 import BarcodeScannerScreen from '../../transaction/BarcodeScannerScreen';
 import { ProductService } from '../../../../services/productService';
 import { Product } from '../../../../types/product.types';
@@ -35,14 +38,10 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
 }) => {
   const scrollViewRef = useRef<ScrollView>(null);
   const [isEditable, setIsEditable] = useState(false);
-  
-  // State untuk kategori
   const [categories, setCategories] = useState<{ label: string; value: string }[]>([]);
-  
-  // State untuk modal tambah kategori
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [showOpnameModal, setShowOpnameModal] = useState(false);
   
-  // Ref untuk mencegah loop
   const loadedProductId = useRef<string | null>(null);
 
   const {
@@ -54,14 +53,12 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
     handleClose();
   }, product?.id);
 
-  // Load kategori dari service
   const loadCategories = useCallback(async () => {
     try {
       const data = await ProductService.getCategories();
       setCategories(data);
     } catch (error) {
       console.error("Gagal memuat kategori:", error);
-      // Set kategori default jika gagal load
       setCategories([
         { label: 'Makanan', value: 'makanan' },
         { label: 'Minuman', value: 'minuman' },
@@ -78,11 +75,8 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
     }
   }, [visible, loadCategories]);
 
-  // ✅ PERBAIKAN: Effect untuk sinkronisasi data (fix infinite loop)
   useEffect(() => {
     if (visible && product && product.id !== loadedProductId.current) {
-      console.log('📝 Loading product data for editing:', product.name);
-      
       setInitialData({
         name: product.name,
         price: product.price.toString(),
@@ -97,35 +91,56 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
       loadedProductId.current = product.id;
     }
 
-    // ✅ Reset state saat modal ditutup
     if (!visible) {
       loadedProductId.current = null;
       setIsEditable(false);
     }
-  }, [visible, product, setInitialData]); // ✅ Tambahkan setInitialData ke dependency
+  }, [visible, product, setInitialData]);
 
-  // Handler untuk menambah kategori baru
+  const handleSaveOpname = async (physicalStock: number, reason: string) => {
+    try {
+      if (!product?.id) return;
+      
+      const productRef = doc(db, 'products', product.id);
+      const systemStock = parseInt(formData.stock || '0');
+      const diff = physicalStock - systemStock;
+
+      await updateDoc(productRef, { 
+        stock: physicalStock,
+        lastOpname: serverTimestamp()
+      });
+
+      await addDoc(collection(db, 'activities'), {
+        type: 'UPDATE',
+        message: `Stock Opname "${formData.name}": Sistem ${systemStock} → Fisik ${physicalStock} (Selisih: ${diff > 0 ? '+' : ''}${diff}). Alasan: ${reason || '-'}`,
+        userName: 'Admin', 
+        createdAt: serverTimestamp()
+      });
+
+      updateField('stock', physicalStock.toString());
+      
+      Alert.alert("Berhasil", "Stok fisik telah disesuaikan");
+      if (onSuccess) onSuccess(); 
+    } catch (error: any) {
+      Alert.alert("Gagal", error.message);
+      throw error;
+    }
+  };
+
   const handleAddCategory = async (categoryName: string) => {
     try {
-      // Simpan kategori baru ke database/service
       await ProductService.addCategory(categoryName);
-      
-      // Reload kategori dari database
       await loadCategories();
-      
-      // Set kategori yang baru ditambahkan sebagai pilihan
       updateField('category', categoryName);
-      
       Alert.alert("Berhasil", `Kategori "${categoryName}" telah ditambahkan.`);
     } catch (error: any) {
       Alert.alert("Error", error.message || "Gagal menambah kategori");
-      console.error("Error menambah kategori:", error);
     }
   };
 
   const handleClose = () => {
     resetForm();
-    setIsEditable(false); // ✅ Reset editable state
+    setIsEditable(false);
     onClose();
   };
 
@@ -134,14 +149,8 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
       "Opsi Generate Barcode",
       "Pilih standar barcode yang diinginkan:",
       [
-        { 
-          text: "EAN-13 (Ritel Standar)", 
-          onPress: () => generateBarcode('EAN13')
-        },
-        { 
-          text: "CODE-128 (Internal Toko)", 
-          onPress: () => generateBarcode('CODE128')
-        },
+        { text: "EAN-13", onPress: () => generateBarcode('EAN13') },
+        { text: "CODE-128", onPress: () => generateBarcode('CODE128') },
         { text: "Batal", style: "cancel" }
       ]
     );
@@ -165,12 +174,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
             behavior={Platform.OS === 'ios' ? 'padding' : undefined}
             style={styles.keyboardView}
           >
-            <View
-              style={[
-                styles.modalContainer,
-                { maxHeight: MAX_MODAL_HEIGHT },
-              ]}
-            >
+            <View style={[styles.modalContainer, { maxHeight: MAX_MODAL_HEIGHT }]}>
               <LinearGradient
                 colors={isEditable ? [COLORS.primary, '#2c537a'] : ['#475569', '#1e293b']}
                 style={styles.header}
@@ -223,6 +227,7 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
                     onScanPress={() => setShowScanner(true)}
                     onAutoGeneratePress={onAutoGeneratePress}
                     onAddCategoryPress={() => setShowCategoryModal(true)}
+                    onStockOpname={() => setShowOpnameModal(true)}
                     onFieldFocus={(fieldY) => {
                       scrollViewRef.current?.scrollTo({ y: fieldY - 60, animated: true });
                     }}
@@ -269,7 +274,6 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
                       <TouchableOpacity 
                         style={styles.cancelButton} 
                         onPress={() => {
-                          // ✅ Reset form ke data awal saat cancel
                           if (product) {
                             setInitialData({
                               name: product.name,
@@ -304,141 +308,47 @@ const EditProductModal: React.FC<EditProductModalProps> = ({
         </View>
       </Modal>
 
-      {/* Modal Tambah Kategori */}
       <AddCategoryModal
         visible={showCategoryModal}
         onClose={() => setShowCategoryModal(false)}
         onAdd={handleAddCategory}
+      />
+
+      <StockOpnameModal 
+        visible={showOpnameModal}
+        onClose={() => setShowOpnameModal(false)}
+        currentStock={parseInt(formData.stock || '0')}
+        productName={formData.name}
+        onSave={handleSaveOpname}
       />
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: { 
-    flex: 1, 
-    justifyContent: 'flex-end' 
-  },
-  backdrop: { 
-    ...StyleSheet.absoluteFillObject, 
-    backgroundColor: 'rgba(0,0,0,0.5)' 
-  },
-  keyboardView: { 
-    justifyContent: 'flex-end' 
-  },
-  modalContainer: { 
-    backgroundColor: COLORS.primary, 
-    borderTopLeftRadius: 30, 
-    borderTopRightRadius: 30, 
-    overflow: 'hidden' 
-  },
-  contentWrapper: { 
-    backgroundColor: COLORS.background, 
-    borderTopLeftRadius: 24, 
-    borderTopRightRadius: 24, 
-    marginTop: -16, 
-    flexShrink: 1 
-  },
-  scrollContent: { 
-    paddingHorizontal: 20, 
-    paddingTop: 24, 
-    paddingBottom: Platform.OS === 'ios' ? 40 : 24 
-  },
-  header: { 
-    paddingBottom: 36, 
-    paddingHorizontal: 20,
-    paddingTop: 16,
-  },
-  dragHandleContainer: { 
-    position: 'absolute', 
-    top: 8, 
-    left: 0, 
-    right: 0, 
-    alignItems: 'center' 
-  },
-  dragHandle: { 
-    width: 42, 
-    height: 5, 
-    borderRadius: 3, 
-    backgroundColor: 'rgba(255,255,255,0.6)' 
-  },
-  headerContent: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    marginTop: 20 
-  },
-  headerTitleContainer: { 
-    flex: 1 
-  },
-  headerSubtitle: { 
-    color: 'rgba(255,255,255,0.7)', 
-    fontSize: 11, 
-    textTransform: 'uppercase', 
-    fontFamily: 'PoppinsMedium' 
-  },
-  headerTitle: { 
-    color: '#FFF', 
-    fontSize: 20, 
-    fontFamily: 'MontserratBold' 
-  },
-  closeButton: { 
-    width: 36, 
-    height: 36, 
-    borderRadius: 18, 
-    backgroundColor: 'rgba(255,255,255,0.2)', 
-    justifyContent: 'center', 
-    alignItems: 'center' 
-  },
-  footerActions: { 
-    marginTop: 10, 
-    gap: 10 
-  },
-  editModeButton: { 
-    backgroundColor: COLORS.primary, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    paddingVertical: 14, 
-    borderRadius: 15, 
-    gap: 10 
-  },
-  saveButton: { 
-    borderRadius: 15, 
-    overflow: 'hidden' 
-  },
-  saveGradient: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    paddingVertical: 14 
-  },
-  buttonText: { 
-    color: '#FFF', 
-    fontSize: 16, 
-    fontFamily: 'PoppinsSemiBold' 
-  },
-  cancelButton: { 
-    alignItems: 'center', 
-    paddingVertical: 8 
-  },
-  cancelButtonText: { 
-    color: COLORS.danger, 
-    fontFamily: 'PoppinsMedium' 
-  },
-  readOnlyBadge: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    backgroundColor: '#F1F5F9', 
-    paddingVertical: 14, 
-    borderRadius: 15, 
-    gap: 8 
-  },
-  readOnlyText: { 
-    color: '#64748B', 
-    fontFamily: 'PoppinsMedium' 
-  },
+  overlay: { flex: 1, justifyContent: 'flex-end' },
+  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  keyboardView: { justifyContent: 'flex-end' },
+  modalContainer: { backgroundColor: COLORS.primary, borderTopLeftRadius: 30, borderTopRightRadius: 30, overflow: 'hidden' },
+  contentWrapper: { backgroundColor: COLORS.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -16, flexShrink: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
+  header: { paddingBottom: 36, paddingHorizontal: 20, paddingTop: 16 },
+  dragHandleContainer: { position: 'absolute', top: 8, left: 0, right: 0, alignItems: 'center' },
+  dragHandle: { width: 42, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.6)' },
+  headerContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 20 },
+  headerTitleContainer: { flex: 1 },
+  headerSubtitle: { color: 'rgba(255,255,255,0.7)', fontSize: 11, textTransform: 'uppercase', fontFamily: 'PoppinsMedium' },
+  headerTitle: { color: '#FFF', fontSize: 20, fontFamily: 'MontserratBold' },
+  closeButton: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
+  footerActions: { marginTop: 10, gap: 10 },
+  editModeButton: { backgroundColor: COLORS.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 15, gap: 10 },
+  saveButton: { borderRadius: 15, overflow: 'hidden' },
+  saveGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 14 },
+  buttonText: { color: '#FFF', fontSize: 16, fontFamily: 'PoppinsSemiBold' },
+  cancelButton: { alignItems: 'center', paddingVertical: 8 },
+  cancelButtonText: { color: COLORS.danger, fontFamily: 'PoppinsMedium' },
+  readOnlyBadge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F5F9', paddingVertical: 14, borderRadius: 15, gap: 8 },
+  readOnlyText: { color: '#64748B', fontFamily: 'PoppinsMedium' },
 });
 
 export default EditProductModal;

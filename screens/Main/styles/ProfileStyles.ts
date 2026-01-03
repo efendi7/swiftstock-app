@@ -1,4 +1,4 @@
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import { COLORS } from '../../../constants/colors';
 
 export const styles = StyleSheet.create({
@@ -9,36 +9,63 @@ export const styles = StyleSheet.create({
   scrollContent: {
     paddingBottom: 30,
   },
-  // Tambahkan di dalam styles = StyleSheet.create({ ... })
-migrationItem: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  paddingVertical: 15,
-  paddingHorizontal: 12,
-  borderTopWidth: 1,
-  borderTopColor: '#F1F5F9',
-  marginTop: 5,
-},
-migrationLeft: {
-  flexDirection: 'row',
-  alignItems: 'center',
-},
-migrationTextContent: {
-  marginLeft: 15,
-},
-migrationLabel: {
-  fontSize: 14,
-  fontFamily: 'PoppinsSemiBold',
-  color: COLORS.textDark,
-},
-migrationSub: {
-  fontSize: 11,
-  fontFamily: 'PoppinsRegular',
-  color: COLORS.textLight,
-},
+
+  // --- MENU ITEM SECTION (Untuk Tombol Tambah Kasir & Menu Umum) ---
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    paddingHorizontal: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  menuItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconContainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  menuItemLabel: {
+    fontSize: 14,
+    fontFamily: 'PoppinsMedium',
+    color: '#333',
+  },
+
+  // --- MIGRATION SECTION ---
+  migrationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    paddingHorizontal: 12,
+    marginTop: 5,
+  },
+  migrationLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  migrationTextContent: {
+    marginLeft: 15,
+  },
+  migrationLabel: {
+    fontSize: 14,
+    fontFamily: 'PoppinsSemiBold',
+    color: COLORS.primary, // Menggunakan primary agar senada
+  },
+  migrationSub: {
+    fontSize: 11,
+    fontFamily: 'PoppinsRegular',
+    color: COLORS.textLight,
+  },
   
-  // Header Section
+  // --- HEADER SECTION ---
   header: {
     paddingBottom: 25,
     alignItems: 'center',
@@ -75,7 +102,7 @@ migrationSub: {
     borderRadius: 15,
   },
 
-  // Name Section
+  // --- NAME SECTION ---
   nameWrapper: {
     width: '100%',
     alignItems: 'center',
@@ -99,7 +126,7 @@ migrationSub: {
     paddingVertical: 5,
   },
 
-  // Content Body
+  // --- CONTENT BODY ---
   content: {
     padding: 24,
   },
@@ -107,22 +134,28 @@ migrationSub: {
     fontSize: 16,
     fontFamily: 'PoppinsSemiBold',
     marginBottom: 15,
+    marginTop: 10,
     color: '#333',
   },
   menuContainer: {
     backgroundColor: '#FFF',
     borderRadius: 24,
     padding: 16,
-    // Shadow untuk iOS
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    // Elevation untuk Android
-    elevation: 2,
+    marginBottom: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
 
-  // Buttons
+  // --- BUTTONS ---
   saveButton: {
     backgroundColor: COLORS.secondary,
     flexDirection: 'row',
@@ -138,7 +171,7 @@ migrationSub: {
     fontFamily: 'PoppinsSemiBold',
   },
   logoutButton: {
-    marginTop: 25,
+    marginTop: 10,
     padding: 18,
     borderRadius: 24,
     alignItems: 'center',
@@ -152,7 +185,7 @@ migrationSub: {
     fontFamily: 'PoppinsSemiBold',
   },
 
-  // Footer
+  // --- FOOTER ---
   version: {
     textAlign: 'center',
     marginTop: 40,

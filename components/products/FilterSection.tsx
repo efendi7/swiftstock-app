@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput } from 'react-native';
 import Collapsible from 'react-native-collapsible';
-import { ChevronDown, ChevronUp, Filter, Calendar, TrendingUp, Clock, Search, X } from 'lucide-react-native';
+import { ChevronDown, ChevronUp, Filter, Calendar, TrendingUp, Clock, Search, X, RotateCcw } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 
@@ -33,29 +33,43 @@ export const FilterSection = ({
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [currentCount, setCurrentCount] = useState(products.length);
 
+  // Fungsi Reset Semua Filter
+  const handleReset = () => {
+    onSearchChange('');
+    onFilterModeChange('all');
+    onSortChange('default');
+  };
+
   const applyFilters = useCallback(() => {
     let filtered = [...products];
 
-    // Logika Pencarian: Mencakup Nama, Barcode, dan Kategori sekaligus
+    // 1. Logika Pencarian & Kategori (Otomatis)
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       filtered = filtered.filter(p => 
         p.name?.toLowerCase().includes(q) || 
         p.barcode?.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q) // Kategori otomatis terfilter lewat sini
+        p.category?.toLowerCase().includes(q) // Filter kategori otomatis di sini
       );
     }
 
-    // Filter Waktu
+    // 2. Filter Waktu (Firebase Timestamp Safety)
+    const getSafeDateString = (timestamp: any) => {
+        if (!timestamp) return null;
+        if (timestamp.toDate) return timestamp.toDate().toDateString(); // Firebase Doc
+        if (timestamp instanceof Date) return timestamp.toDateString(); // JS Date
+        return new Date(timestamp).toDateString(); // Fallback
+    };
+
     if (filterMode === 'today') {
       const today = new Date().toDateString();
-      filtered = filtered.filter(p => p.createdAt?.toDate?.().toDateString() === today);
+      filtered = filtered.filter(p => getSafeDateString(p.createdAt) === today);
     } else if (filterMode === 'range') {
       const targetDate = selectedDate.toDateString();
-      filtered = filtered.filter(p => p.createdAt?.toDate?.().toDateString() === targetDate);
+      filtered = filtered.filter(p => getSafeDateString(p.createdAt) === targetDate);
     }
 
-    // Filter Status Stok
+    // 3. Filter Status Stok
     if (sortType === 'stock-safe') {
       filtered = filtered.filter(p => (p.stock || 0) > 10);
     } else if (sortType === 'stock-critical') {
@@ -64,12 +78,15 @@ export const FilterSection = ({
       filtered = filtered.filter(p => (p.stock || 0) <= 0);
     }
 
-    // Sort Logic
+    // 4. Sort Logic
     filtered.sort((a, b) => {
+      const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
+      const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+
       switch (sortType) {
-        case 'sold-desc': return (b.sold || 0) - (a.sold || 0);
-        case 'date-desc': return (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0);
-        case 'date-asc': return (a.createdAt?.toDate?.() || 0) - (b.createdAt?.toDate?.() || 0);
+        case 'sold-desc': return (b.soldCount || 0) - (a.soldCount || 0);
+        case 'date-desc': return dateB - dateA;
+        case 'date-asc': return dateA - dateB;
         default: return 0;
       }
     });
@@ -82,37 +99,41 @@ export const FilterSection = ({
     applyFilters();
   }, [applyFilters]);
 
+  const hasActiveFilters = searchQuery !== '' || filterMode !== 'all' || sortType !== 'default';
+
   return (
     <View style={styles.outerContainer}>
       <View style={styles.mainCard}>
-        {/* HANYA SEARCH BAR (KATEGORI OTOMATIS LEWAT INPUT INI) */}
+        {/* SEARCH BAR UTAMA */}
         <View style={styles.searchContainer}>
           <Search size={18} color="#94A3B8" />
           <TextInput
             style={styles.searchInput}
-            placeholder={userRole === 'admin' ? "Cari produk, barcode, atau kategori..." : "Cari produk..."}
+            placeholder={userRole === 'admin' ? "Cari nama, barcode, atau kategori..." : "Cari produk..."}
             value={searchQuery}
             onChangeText={onSearchChange}
             placeholderTextColor="#94A3B8"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => onSearchChange('')}>
-              <X size={16} color="#94A3B8" />
+              <X size={18} color="#94A3B8" />
             </TouchableOpacity>
           )}
         </View>
 
         <View style={styles.divider} />
 
-        {/* TOMBOL TOGGLE FILTER (UNTUK WAKTU & SORTIR) */}
+        {/* TOGGLE FILTER */}
         <TouchableOpacity 
           style={styles.toggle} 
           onPress={() => setIsExpanded(!isExpanded)}
           activeOpacity={0.7}
         >
           <View style={styles.toggleLeft}>
-            <Filter size={18} color={COLORS.secondary} />
-            <Text style={styles.toggleText}>Filter Lanjutan</Text>
+            <Filter size={18} color={hasActiveFilters ? COLORS.primary : COLORS.secondary} />
+            <Text style={[styles.toggleText, hasActiveFilters && {color: COLORS.primary}]}>
+                {hasActiveFilters ? "Filter Aktif" : "Filter Lanjutan"}
+            </Text>
           </View>
           <View style={styles.toggleRight}>
             <Text style={styles.countText}>{currentCount} Item</Text>
@@ -122,7 +143,15 @@ export const FilterSection = ({
 
         <Collapsible collapsed={!isExpanded}>
           <View style={styles.filterBox}>
-            <Text style={styles.sectionLabel}>Waktu</Text>
+            <View style={styles.sectionHeader}>
+                <Text style={styles.sectionLabel}>Waktu</Text>
+                {filterMode !== 'all' && (
+                    <TouchableOpacity onPress={() => onFilterModeChange('all')}>
+                        <Text style={styles.resetItemText}>Reset Waktu</Text>
+                    </TouchableOpacity>
+                )}
+            </View>
+            
             <View style={styles.row}>
               <TouchableOpacity 
                 style={[styles.btn, filterMode === 'today' && styles.btnActive]}
@@ -135,7 +164,10 @@ export const FilterSection = ({
                 style={[styles.btn, filterMode === 'range' && styles.btnActive]}
                 onPress={() => setDatePickerVisibility(true)}
               >
-                <Text style={[styles.btnText, filterMode === 'range' && styles.btnTextActive]}>Pilih Tanggal</Text>
+                <Calendar size={14} color={filterMode === 'range' ? '#FFF' : COLORS.secondary} style={{marginRight: 6}}/>
+                <Text style={[styles.btnText, filterMode === 'range' && styles.btnTextActive]}>
+                    {filterMode === 'range' ? selectedDate.toLocaleDateString('id-ID', {day: 'numeric', month: 'short'}) : "Pilih Tanggal"}
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -151,6 +183,12 @@ export const FilterSection = ({
                 <SortBtn label="Habis" type="stock-empty" current={sortType} onSelect={onSortChange} activeColor="#EF4444" />
               </View>
             </View>
+
+            {/* Tombol Reset Global */}
+            <TouchableOpacity style={styles.resetAllBtn} onPress={handleReset}>
+                <RotateCcw size={14} color="#EF4444" />
+                <Text style={styles.resetAllText}>Reset Semua Filter</Text>
+            </TouchableOpacity>
           </View>
         </Collapsible>
       </View>
@@ -177,7 +215,7 @@ const SortBtn = ({ label, type, current, onSelect, icon, activeColor }: any) => 
   return (
     <TouchableOpacity 
       style={[styles.gridItem, { backgroundColor, borderColor }]}
-      onPress={() => onSelect(type)}
+      onPress={() => onSelect(isActive ? 'default' : type)} // Toggle off if clicked again
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
         {icon}
@@ -194,12 +232,17 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    elevation: 2, // Tambahkan sedikit shadow
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    height: 54, // Tinggi lebih lega untuk search bar utama
+    height: 54,
     gap: 10,
   },
   searchInput: {
@@ -215,16 +258,29 @@ const styles = StyleSheet.create({
   toggleText: { fontFamily: 'PoppinsSemiBold', fontSize: 13, color: '#475569' },
   countText: { color: COLORS.secondary, fontSize: 11, fontFamily: 'PoppinsBold' },
   filterBox: { paddingHorizontal: 16, paddingBottom: 16 },
-  sectionLabel: { fontSize: 10, fontFamily: 'PoppinsBold', color: '#CBD5E1', marginBottom: 6, marginTop: 10, textTransform: 'uppercase' },
-  row: { flexDirection: 'row', gap: 6 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 },
+  sectionLabel: { fontSize: 10, fontFamily: 'PoppinsBold', color: '#94A3B8', textTransform: 'uppercase' },
+  resetItemText: { fontSize: 10, color: '#EF4444', fontFamily: 'PoppinsMedium' },
+  row: { flexDirection: 'row', gap: 6, marginTop: 6 },
   btn: { flex: 1, flexDirection: 'row', paddingVertical: 10, backgroundColor: '#F8FAFC', borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
   btnActive: { backgroundColor: COLORS.secondary, borderColor: COLORS.secondary },
   btnText: { fontSize: 11, fontFamily: 'PoppinsSemiBold', color: '#64748B' },
   btnTextActive: { color: '#FFF' },
-  gridContainer: { gap: 6 },
+  gridContainer: { gap: 6, marginTop: 6 },
   gridRow: { flexDirection: 'row', gap: 6 },
   gridItem: { flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  gridText: { fontSize: 10, fontFamily: 'PoppinsMedium', color: '#64748B' }
+  gridText: { fontSize: 10, fontFamily: 'PoppinsMedium', color: '#64748B' },
+  resetAllBtn: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center', 
+    gap: 6, 
+    marginTop: 16, 
+    paddingVertical: 8, 
+    borderTopWidth: 1, 
+    borderTopColor: '#F1F5F9' 
+  },
+  resetAllText: { fontSize: 11, fontFamily: 'PoppinsSemiBold', color: '#EF4444' }
 });
 
 export default FilterSection;

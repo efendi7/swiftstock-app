@@ -49,14 +49,14 @@ const TransactionScreen = () => {
       const transactionsRef = collection(db, 'transactions');
 
       if (isAdmin) {
-        q = query(transactionsRef, orderBy('createdAt', 'desc'));
-      } else {
-        q = query(
-          transactionsRef, 
-          where('cashierId', '==', user.uid), 
-          orderBy('createdAt', 'desc')
-        );
-      }
+  q = query(transactionsRef, orderBy('date', 'desc')); // Ubah dari createdAt ke date
+} else {
+  q = query(
+    transactionsRef, 
+    where('cashierId', '==', user.uid), 
+    orderBy('date', 'desc') // Ubah dari createdAt ke date
+  );
+}
 
       const snapshot = await getDocs(q);
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
@@ -87,14 +87,15 @@ const TransactionScreen = () => {
       );
     }
 
-    // 2. Filter Waktu: Hari Ini
-    if (filterMode === 'today') {
-      const todayStr = new Date().toDateString();
-      filtered = filtered.filter(t => {
-        if (!t.createdAt) return false;
-        return t.createdAt.toDate().toDateString() === todayStr;
-      });
-    }
+  if (filterMode === 'today') {
+  const todayStr = new Date().toDateString();
+  filtered = filtered.filter(t => {
+    // Gunakan t.date karena di Firestore Anda fieldnya bernama 'date'
+    const transDate = t.date?.toDate?.() || t.createdAt?.toDate?.();
+    if (!transDate) return false;
+    return transDate.toDateString() === todayStr;
+  });
+}
 
     // 3. Filter Waktu: Tanggal Spesifik (DatePicker)
     if (filterMode === 'specificMonth') {

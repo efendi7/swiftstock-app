@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
-  Alert,
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
@@ -14,39 +13,31 @@ import {
   ScrollView,
   KeyboardAvoidingView,
 } from 'react-native';
-
 import { Mail, Lock } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../navigation/types';
-import { loginUser } from '../../services/authService';
+import { COLORS } from '../../constants/colors';
+import { loginUser, sendPasswordReset } from '../../services/authService';
 import FloatingLabelInput from '../../components/FloatingLabelInput';
+import ErrorModal from './ErrorModal';
+import ResetPasswordModal from './ResetPasswordModal';
 
-// Tipe navigasi (Sesuaikan dengan setup project Anda)
-type LoginNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
-
-const { height } = Dimensions.get('window');
-
-const COLORS = {
-  primary: '#1C3A5A',
-  secondary: '#00A79D',
-  accent: '#F58220',
-  background: '#F5F5F5',
-  cardBg: '#FFFFFF',
-  textDark: '#444444',
-  textLight: '#7f8c8d',
-  disabled: '#95a5a6',
-};
+const { width } = Dimensions.get('window');
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [errorModal, setErrorModal] = useState({
+    visible: false,
+    title: '',
+    message: '',
+  });
+  const [resetPasswordModal, setResetPasswordModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const navigation = useNavigation<LoginNavigationProp>();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -63,11 +54,17 @@ const LoginScreen = () => {
       }),
     ]).start();
 
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
-    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    const showSub = Keyboard.addListener(showEvent, () =>
+      setKeyboardVisible(true)
+    );
+    const hideSub = Keyboard.addListener(hideEvent, () =>
+      setKeyboardVisible(false)
+    );
 
     return () => {
       showSub.remove();
@@ -75,36 +72,72 @@ const LoginScreen = () => {
     };
   }, []);
 
+  const shakeAnimation = () => {
+    Animated.sequence([
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
+      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const showErrorModal = (title: string, message: string) => {
+    shakeAnimation();
+    setErrorModal({ visible: true, title, message });
+  };
+
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('Error', 'Email dan Password harus diisi.');
+    if (!email.trim()) {
+      showErrorModal('Email Kosong', 'Silakan masukkan alamat email.');
+      return;
+    }
+
+    if (!password) {
+      showErrorModal('Password Kosong', 'Silakan masukkan password.');
       return;
     }
 
     setIsLoading(true);
     try {
       await loginUser(email.trim(), password);
-      // Catatan: Navigasi biasanya dihandle otomatis oleh Auth State di App.js
-    } catch (error) {
-      Alert.alert('Login Gagal', 'Email atau Password salah.');
+    } catch (error: any) {
+      showErrorModal(
+        error?.title || 'Login Gagal',
+        error?.message || 'Terjadi kesalahan saat login.'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleSendPasswordReset = async (resetEmail: string) => {
+    try {
+      await sendPasswordReset(resetEmail);
+      setSuccessMessage('Link reset password telah dikirim ke email Anda.');
+      setTimeout(() => setSuccessMessage(''), 5000);
+    } catch (error: any) {
+      showErrorModal('Reset Password Gagal', error.message);
+      throw error;
+    }
+  };
+
   return (
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Animated.View
           style={[
             styles.card,
-            { opacity: fadeAnim, transform: [{ scale: scaleAnim }] },
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }, { translateX: shakeAnim }],
+            },
           ]}
         >
           <Image
@@ -115,8 +148,14 @@ const LoginScreen = () => {
 
           <Text style={styles.title}>Selamat Datang</Text>
           <Text style={styles.subtitle}>
-            Silakan masuk untuk melanjutkan transaksi kasir Anda.
+            Silakan masuk untuk melanjutkan transaksi kasir.
           </Text>
+
+          {successMessage ? (
+            <View style={styles.successBanner}>
+              <Text style={styles.successText}>{successMessage}</Text>
+            </View>
+          ) : null}
 
           <FloatingLabelInput
             label="Email"
@@ -125,6 +164,7 @@ const LoginScreen = () => {
             keyboardType="email-address"
             autoCapitalize="none"
             icon={<Mail size={20} color={COLORS.textLight} />}
+            editable={!isLoading}
           />
 
           <FloatingLabelInput
@@ -132,44 +172,54 @@ const LoginScreen = () => {
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            isPassword
             icon={<Lock size={20} color={COLORS.textLight} />}
+            editable={!isLoading}
           />
 
           <TouchableOpacity
+            onPress={() => setResetPasswordModal(true)}
+            disabled={isLoading}
+            style={styles.forgotPassword}
+          >
+            <Text style={styles.forgotPasswordText}>Lupa Password?</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
-            activeOpacity={0.8}
-            style={[
-              styles.loginButton,
-              isLoading && styles.loginButtonDisabled,
-            ]}
           >
             {isLoading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={COLORS.white} />
             ) : (
-              <Text style={styles.loginButtonText}>Masuk Sekarang</Text>
+              <Text style={styles.loginButtonText}>Masuk</Text>
             )}
           </TouchableOpacity>
 
-          {/* Link ke Register */}
-          <TouchableOpacity
-            style={styles.registerLink}
-            onPress={() => navigation.navigate('Register')}
-            disabled={isLoading}
-          >
-            <Text style={styles.registerText}>
-              Belum punya akun? <Text style={styles.registerTextHighlight}>Daftar di sini</Text>
-            </Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {!isKeyboardVisible && (
-          <Text style={styles.footerText}>
-            Swiftstock by Efendi • © 2025
+          <Text style={styles.infoText}>
+            Akun dibuat oleh administrator sistem.
           </Text>
-        )}
+
+          {!isKeyboardVisible && (
+            <Text style={styles.footerText}>
+              Swiftstock by Efendi • © 2025
+            </Text>
+          )}
+        </Animated.View>
       </ScrollView>
+
+      <ErrorModal
+        visible={errorModal.visible}
+        title={errorModal.title}
+        message={errorModal.message}
+        onClose={() => setErrorModal({ ...errorModal, visible: false })}
+      />
+
+      <ResetPasswordModal
+        visible={resetPasswordModal}
+        onClose={() => setResetPasswordModal(false)}
+        onSendReset={handleSendPasswordReset}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -183,8 +233,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 40,
-    paddingHorizontal: 20,
+    padding: 20,
   },
   card: {
     width: '100%',
@@ -192,67 +241,70 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.cardBg,
     borderRadius: 25,
     padding: 25,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 8,
-      },
-    }),
+    elevation: 8,
   },
   logo: {
     width: '100%',
     height: 60,
-    alignSelf: 'center',
     marginBottom: 10,
   },
   title: {
     fontSize: 26,
     color: COLORS.primary,
-    marginBottom: 8,
     textAlign: 'center',
-    fontFamily: 'MontserratBold', // Diselaraskan dengan Register
+    marginBottom: 6,
+    fontFamily: 'PoppinsSemiBold',
   },
   subtitle: {
     fontSize: 14,
     color: COLORS.textLight,
-    marginBottom: 25,
     textAlign: 'center',
-    lineHeight: 20,
-    fontFamily: 'PoppinsRegular', // Diselaraskan dengan Register
+    marginBottom: 25,
+    fontFamily: 'PoppinsRegular',
+  },
+  successBanner: {
+    backgroundColor: '#D4EDDA',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 15,
+  },
+  successText: {
+    color: '#155724',
+    fontSize: 14,
+    textAlign: 'center',
+    fontFamily: 'PoppinsRegular',
+  },
+  forgotPassword: {
+    alignSelf: 'flex-end',
+    marginVertical: 8,
+  },
+  forgotPasswordText: {
+    color: COLORS.secondary,
+    fontSize: 14,
+    fontFamily: 'PoppinsSemiBold',
   },
   loginButton: {
     backgroundColor: COLORS.secondary,
     height: 55,
     borderRadius: 12,
-    marginTop: 15,
-    alignItems: 'center',
     justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 15,
   },
   loginButtonDisabled: {
-    backgroundColor: COLORS.disabled,
+    backgroundColor: COLORS.textLight,
   },
   loginButtonText: {
-    color: '#FFFFFF',
+    color: COLORS.white,
     fontSize: 18,
-    fontFamily: 'PoppinsSemiBold', // Diselaraskan dengan Register
-  },
-  registerLink: {
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  registerText: {
-    color: COLORS.textLight,
-    fontSize: 14,
-    fontFamily: 'PoppinsRegular',
-  },
-  registerTextHighlight: {
-    color: COLORS.primary,
     fontFamily: 'PoppinsSemiBold',
+  },
+  infoText: {
+    marginTop: 20,
+    textAlign: 'center',
+    color: COLORS.textLight,
+    fontSize: 13,
+    fontFamily: 'PoppinsRegular',
   },
   footerText: {
     marginTop: 30,

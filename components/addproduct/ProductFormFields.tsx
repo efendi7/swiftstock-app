@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Text, Image } from 'react-native';
-import { 
-  Tag, HandCoins, Layers, Barcode, Coins, Truck, 
-  LayoutGrid, Maximize, Camera, X, Plus, Zap
+import {
+  Tag,
+  HandCoins,
+  Layers,
+  Barcode,
+  Coins,
+  Truck,
+  LayoutGrid,
+  Maximize,
+  Camera,
+  X,
+  Plus,
+  Zap,
 } from 'lucide-react-native';
 import { Dropdown } from 'react-native-element-dropdown';
 import { COLORS } from '../../constants/colors';
@@ -30,16 +40,35 @@ export interface ProductFormFieldsProps {
   onScanPress: () => void;
   onAutoGeneratePress: () => void;
   onAddCategoryPress: () => void;
+  onStockOpname: () => void; // ✅ Menambahkan prop yang kurang
   onFieldFocus?: (y: number) => void;
   isEditable?: boolean;
 }
 
 export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
-  name, price, purchasePrice, supplier, category, stock, barcode, imageUri,
+  name,
+  price,
+  purchasePrice,
+  supplier,
+  category,
+  stock,
+  barcode,
+  imageUri,
   categories,
-  onChangeName, onChangePrice, onChangePurchasePrice, onChangeSupplier,
-  onChangeCategory, onChangeStock, onChangeBarcode, onPickImage, onRemoveImage,
-  onScanPress, onAutoGeneratePress, onAddCategoryPress, onFieldFocus,
+  onChangeName,
+  onChangePrice,
+  onChangePurchasePrice,
+  onChangeSupplier,
+  onChangeCategory,
+  onChangeStock,
+  onChangeBarcode,
+  onPickImage,
+  onRemoveImage,
+  onScanPress,
+  onAutoGeneratePress,
+  onAddCategoryPress,
+  onStockOpname, // ✅ Destructure prop disini
+  onFieldFocus,
   isEditable = true,
 }) => {
   const iconColor = isEditable ? COLORS.primary : '#94A3B8';
@@ -50,30 +79,39 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
       {/* --- SECTION: IMAGE PICKER --- */}
       <View style={styles.imageSection}>
         <Text style={styles.sectionLabel}>Foto Produk</Text>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[
-            styles.imageUploadBox, 
+            styles.imageUploadBox,
             imageUri && styles.imageBoxActive,
-            !isEditable && { borderStyle: 'solid', backgroundColor: '#F1F5F9' }
-          ]} 
+            !isEditable && { borderStyle: 'solid', backgroundColor: '#F1F5F9' },
+          ]}
           onPress={isEditable ? onPickImage : undefined}
-          activeOpacity={isEditable ? 0.7 : 1}
-        >
+          activeOpacity={isEditable ? 0.7 : 1}>
           {imageUri ? (
             <>
               <Image source={{ uri: imageUri }} style={styles.previewImage} />
               {isEditable && (
-                <TouchableOpacity style={styles.removeImageBtn} onPress={onRemoveImage}>
+                <TouchableOpacity
+                  style={styles.removeImageBtn}
+                  onPress={onRemoveImage}>
                   <X size={16} color="#fff" />
                 </TouchableOpacity>
               )}
             </>
           ) : (
             <View style={styles.placeholderContainer}>
-              <View style={[styles.iconCircle, !isEditable && { backgroundColor: '#E2E8F0' }]}>
+              <View
+                style={[
+                  styles.iconCircle,
+                  !isEditable && { backgroundColor: '#E2E8F0' },
+                ]}>
                 <Camera size={24} color={iconColor} />
               </View>
-              <Text style={[styles.uploadText, !isEditable && { color: '#94A3B8' }]}>
+              <Text
+                style={[
+                  styles.uploadText,
+                  !isEditable && { color: '#94A3B8' },
+                ]}>
                 {isEditable ? 'Tambah Foto' : 'Tidak ada foto'}
               </Text>
             </View>
@@ -83,7 +121,6 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
 
       {/* --- SECTION: INPUT FIELDS --- */}
       <View>
-        {/* Nama Produk - Full Width */}
         <FloatingLabelInput
           label="Nama Produk"
           value={name}
@@ -93,12 +130,15 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
           editable={isEditable}
         />
 
-        {/* Kategori - Full Width */}
-        <View style={[styles.dropdownContainer, isFocus && { borderColor: COLORS.primary }]}>
-          <LayoutGrid 
-            size={18} 
-            color={isFocus ? COLORS.primary : iconColor} 
-            style={styles.dropdownIcon} 
+        <View
+          style={[
+            styles.dropdownContainer,
+            isFocus && { borderColor: COLORS.primary },
+          ]}>
+          <LayoutGrid
+            size={18}
+            color={isFocus ? COLORS.primary : iconColor}
+            style={styles.dropdownIcon}
           />
           <Dropdown
             style={styles.dropdown}
@@ -123,21 +163,16 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
             containerStyle={{ zIndex: 1000 }}
           />
           {isEditable && (
-            <TouchableOpacity 
-              style={styles.addCategoryBtn} 
-              onPress={(e) => {
-                e?.stopPropagation?.();
-                onAddCategoryPress();
-              }}
+            <TouchableOpacity
+              style={styles.addCategoryBtn}
+              onPress={onAddCategoryPress}
               hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              activeOpacity={0.6}
-            >
+              activeOpacity={0.6}>
               <Plus size={20} color={COLORS.primary} />
             </TouchableOpacity>
           )}
         </View>
 
-        {/* Pemasok - Full Width */}
         <FloatingLabelInput
           label="Pemasok"
           value={supplier}
@@ -147,59 +182,86 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
           editable={isEditable}
         />
 
-        {/* Harga Jual & Harga Beli - 2 Grid */}
         <View style={styles.row}>
           <View style={styles.flex}>
-            <FloatingLabelInput 
-              label="Harga Jual" 
-              value={price} 
-              onChangeText={onChangePrice} 
-              keyboardType="numeric" 
-              icon={<HandCoins size={18} color={iconColor} />} 
-              onFocusCallback={onFieldFocus} 
-              editable={isEditable} 
+            <FloatingLabelInput
+              label="Harga Jual"
+              value={price}
+              onChangeText={onChangePrice}
+              keyboardType="numeric"
+              icon={<HandCoins size={18} color={iconColor} />}
+              onFocusCallback={onFieldFocus}
+              editable={isEditable}
             />
           </View>
           <View style={styles.flex}>
-            <FloatingLabelInput 
-              label="Harga Beli" 
-              value={purchasePrice} 
-              onChangeText={onChangePurchasePrice} 
-              keyboardType="numeric" 
-              icon={<Coins size={18} color={iconColor} />} 
-              onFocusCallback={onFieldFocus} 
-              editable={isEditable} 
+            <FloatingLabelInput
+              label="Harga Beli"
+              value={purchasePrice}
+              onChangeText={onChangePurchasePrice}
+              keyboardType="numeric"
+              icon={<Coins size={18} color={iconColor} />}
+              onFocusCallback={onFieldFocus}
+              editable={isEditable}
             />
           </View>
         </View>
 
-        {/* Stok & Barcode - 2 Grid */}
         <View style={styles.row}>
           <View style={styles.flex}>
-            <FloatingLabelInput 
-              label="Stok" 
-              value={stock} 
-              onChangeText={onChangeStock} 
-              keyboardType="numeric" 
-              icon={<Layers size={18} color={iconColor} />} 
-              onFocusCallback={onFieldFocus} 
-              editable={isEditable} 
-            />
+            <View style={styles.stockInputWrapper}>
+              <FloatingLabelInput
+                label="Stok"
+                value={stock}
+                onChangeText={onChangeStock}
+                keyboardType="numeric"
+                icon={<Layers size={18} color={iconColor} />}
+                onFocusCallback={onFieldFocus}
+                editable={isEditable}
+              />
+              {isEditable && (
+                <View style={styles.stockStepper}>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() =>
+                      onChangeStock((parseInt(stock || '0') + 1).toString())
+                    }>
+                    <Plus size={14} color={COLORS.primary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.stepperBtn}
+                    onPress={() =>
+                      onChangeStock(
+                        Math.max(0, parseInt(stock || '0') - 1).toString(),
+                      )
+                    }>
+                    <View style={styles.minusIcon} />
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+            {isEditable && (
+              <TouchableOpacity
+                style={styles.opnameBtn}
+                onPress={onStockOpname} // ✅ Memanggil prop onStockOpname
+              >
+                <Text style={styles.opnameText}>Stock Opname</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <View style={styles.flex}>
-            <FloatingLabelInput 
-              label="Barcode" 
-              value={barcode} 
-              onChangeText={onChangeBarcode} 
-              icon={<Barcode size={18} color={iconColor} />} 
-              onFocusCallback={onFieldFocus} 
-              editable={isEditable} 
+            <FloatingLabelInput
+              label="Barcode"
+              value={barcode}
+              onChangeText={onChangeBarcode}
+              icon={<Barcode size={18} color={iconColor} />}
+              onFocusCallback={onFieldFocus}
+              editable={isEditable}
             />
           </View>
         </View>
       </View>
 
-      {/* Action Buttons */}
       {isEditable && (
         <View style={styles.actions}>
           <TouchableOpacity style={styles.btn} onPress={onScanPress}>
@@ -217,75 +279,54 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
 };
 
 const styles = StyleSheet.create({
-  card: { 
-    backgroundColor: '#fff', 
-    borderRadius: 24, 
-    padding: 18 
+  card: { backgroundColor: '#fff', borderRadius: 24, padding: 18 },
+  imageSection: { marginBottom: 20, alignItems: 'center' },
+  sectionLabel: {
+    fontFamily: 'PoppinsBold',
+    fontSize: 14,
+    color: '#1E293B',
+    alignSelf: 'flex-start',
+    marginBottom: 10,
   },
-  imageSection: { 
-    marginBottom: 20, 
-    alignItems: 'center' 
+  imageUploadBox: {
+    width: '100%',
+    height: 140,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
   },
-  sectionLabel: { 
-    fontFamily: 'PoppinsBold', 
-    fontSize: 14, 
-    color: '#1E293B', 
-    alignSelf: 'flex-start', 
-    marginBottom: 10 
+  imageBoxActive: { borderStyle: 'solid', borderColor: COLORS.primary },
+  previewImage: { width: '100%', height: '100%' },
+  placeholderContainer: { alignItems: 'center' },
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#EFF6FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  imageUploadBox: { 
-    width: '100%', 
-    height: 140, 
-    borderRadius: 16, 
-    backgroundColor: '#F8FAFC', 
-    borderWidth: 1, 
-    borderColor: '#E2E8F0', 
-    borderStyle: 'dashed', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    overflow: 'hidden' 
+  uploadText: {
+    fontFamily: 'PoppinsSemiBold',
+    fontSize: 12,
+    color: COLORS.primary,
   },
-  imageBoxActive: { 
-    borderStyle: 'solid', 
-    borderColor: COLORS.primary 
+  removeImageBtn: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255, 68, 68, 0.8)',
+    padding: 4,
+    borderRadius: 12,
   },
-  previewImage: { 
-    width: '100%', 
-    height: '100%' 
-  },
-  placeholderContainer: { 
-    alignItems: 'center' 
-  },
-  iconCircle: { 
-    width: 48, 
-    height: 48, 
-    borderRadius: 24, 
-    backgroundColor: '#EFF6FF', 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: 8 
-  },
-  uploadText: { 
-    fontFamily: 'PoppinsSemiBold', 
-    fontSize: 12, 
-    color: COLORS.primary 
-  },
-  removeImageBtn: { 
-    position: 'absolute', 
-    top: 8, 
-    right: 8, 
-    backgroundColor: 'rgba(255, 68, 68, 0.8)', 
-    padding: 4, 
-    borderRadius: 12 
-  },
-  row: { 
-    flexDirection: 'row', 
-    gap: 10, 
-    alignItems: 'center' 
-  },
-  flex: { 
-    flex: 1 
-  },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  flex: { flex: 1 },
   dropdownContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,63 +338,71 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     paddingHorizontal: 12,
   },
-  dropdownIcon: { 
-    marginRight: 8 
+  dropdownIcon: { marginRight: 8 },
+  dropdown: { flex: 1, height: '100%' },
+  placeholderStyle: {
+    fontSize: 14,
+    color: '#94A3B8',
+    fontFamily: 'PoppinsRegular',
   },
-  dropdown: { 
-    flex: 1, 
-    height: '100%' 
+  selectedTextStyle: {
+    fontSize: 14,
+    color: '#1E293B',
+    fontFamily: 'PoppinsMedium',
   },
-  placeholderStyle: { 
-    fontSize: 14, 
-    color: '#94A3B8', 
-    fontFamily: 'PoppinsRegular' 
-  },
-  selectedTextStyle: { 
-    fontSize: 14, 
-    color: '#1E293B', 
-    fontFamily: 'PoppinsMedium' 
-  },
-  inputSearchStyle: { 
-    height: 40, 
-    fontSize: 14, 
-    borderRadius: 8 
-  },
+  inputSearchStyle: { height: 40, fontSize: 14, borderRadius: 8 },
   addCategoryBtn: {
     padding: 5,
     marginLeft: 5,
     backgroundColor: '#EFF6FF',
     borderRadius: 8,
-    zIndex: 2,
-    elevation: 2,
   },
-  actions: { 
-    flexDirection: 'row', 
-    justifyContent: 'flex-end', 
-    gap: 8, 
-    marginTop: 12 
+  actions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+    marginTop: 12,
   },
-  btn: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 5, 
-    backgroundColor: COLORS.secondary, 
-    paddingHorizontal: 14, 
-    paddingVertical: 9, 
-    borderRadius: 10 
+  btn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: COLORS.secondary,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
-  btnAlt: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 5, 
-    backgroundColor: '#FF8A65', 
-    paddingHorizontal: 14, 
-    paddingVertical: 9, 
-    borderRadius: 10 
+  btnAlt: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#FF8A65',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
   },
-  btnText: { 
-    color: '#fff', 
-    fontFamily: 'PoppinsBold', 
-    fontSize: 12 
+  btnText: { color: '#fff', fontFamily: 'PoppinsBold', fontSize: 12 },
+  stockInputWrapper: { position: 'relative', justifyContent: 'center' },
+  stockStepper: { position: 'absolute', right: 10, top: 10, gap: 4 },
+  stepperBtn: {
+    backgroundColor: '#EFF6FF',
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  minusIcon: {
+    width: 8,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    borderRadius: 1,
+  },
+  opnameBtn: { marginTop: -10, marginBottom: 10, alignSelf: 'flex-start' },
+  opnameText: {
+    fontSize: 10,
+    fontFamily: 'PoppinsMedium',
+    color: COLORS.primary,
+    textDecorationLine: 'underline',
   },
 });
