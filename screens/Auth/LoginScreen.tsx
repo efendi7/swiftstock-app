@@ -171,7 +171,7 @@ const LoginScreen = () => {
             label="Password"
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            isPassword={true}
             icon={<Lock size={20} color={COLORS.textLight} />}
             editable={!isLoading}
           />
