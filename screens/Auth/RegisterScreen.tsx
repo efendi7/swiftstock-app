@@ -1,124 +1,418 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  View,
   Text,
   StyleSheet,
+  TouchableOpacity,
+  Platform,
   Image,
   ScrollView,
   KeyboardAvoidingView,
-  Platform,
-  Animated,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
+import { Mail, Lock, User } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
-import { RootStackParamList } from '../../navigation/types';
-import { COLORS } from '../../constants/theme';
-import { useRegister } from '../../hooks/auth/useRegister';
-import { useKeyboardVisibility } from '../../hooks/auth/useKeyboardVisibility';
-import { useFadeScaleAnimation } from '../../hooks/auth/useFadeScaleAnimation';
-import RegisterForm from '../../components/auth/RegisterForm';
+// FIREBASE
+import { auth, db } from '@services/firebaseConfig';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
-type NavProp =
-  NativeStackNavigationProp<RootStackParamList, 'Register'>;
+import FloatingLabelInput from '@components/FloatingLabelInput';
+
+const COLORS = {
+  primary: '#1C3A5A',
+  secondary: '#00A79D',
+  background: '#F5F5F5',
+  white: '#FFFFFF',
+  textDark: '#444444',
+  textLight: '#7f8c8d',
+} as const;
+
+const { width } = Dimensions.get('window');
+const isMobile = width < 768;
+
+const REGISTER_IMAGE = require('@assets/promo-register.jpg');
+const LOGO_IMAGE = require('@assets/iconmain.png');
 
 const RegisterScreen = () => {
-  const navigation = useNavigation<NavProp>();
-  const keyboardVisible = useKeyboardVisibility();
-  const { fade, scale } = useFadeScaleAnimation();
+  const navigation = useNavigation();
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const register = useRegister(() =>
-    navigation.replace('Login')
+  const handleRegister = async () => {
+    if (!fullName || !email || !password) {
+      alert('Harap lengkapi semua field.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // Generate Tenant ID untuk toko baru
+      const tenantId = `tenant_${Date.now()}_${user.uid.substring(0, 8)}`;
+
+      // 1. Buat Tenant Document (Toko)
+      await setDoc(doc(db, 'tenants', tenantId), {
+        name: `${fullName}'s Store`, // Bisa diganti nanti di settings
+        adminId: user.uid,
+        subscriptionPlan: 'free', // Trial gratis 30 hari
+        subscriptionStatus: 'active',
+        subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 hari
+        createdAt: new Date().toISOString(),
+      });
+
+      // 2. Buat User Document
+      await setDoc(doc(db, 'users', user.uid), {
+        fullName,
+        email,
+        role: 'admin', // Default role saat register = admin (pemilik toko)
+        tenantId, // Link ke toko mereka
+        createdAt: new Date().toISOString(),
+        createdBy: user.uid, // Admin membuat akun sendiri
+      });
+
+      console.log('✅ Registration successful!');
+      console.log('User UID:', user.uid);
+      console.log('Tenant ID:', tenantId);
+
+      // Navigation handled by AuthStateListener in AppNavigator
+    } catch (error: any) {
+      console.error('❌ Register Error:', error);
+
+      let errorMessage = error.message;
+
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'Email sudah terdaftar. Silakan login atau gunakan email lain.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password minimal 6 karakter.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Format email tidak valid.';
+      }
+
+      alert(errorMessage);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const goToLogin = () => {
+    navigation.navigate('Login' as never);
+  };
+
+  const renderForm = () => (
+    <>
+      <FloatingLabelInput
+        label="Nama Lengkap"
+        value={fullName}
+        onChangeText={setFullName}
+        icon={<User size={20} color={COLORS.textLight} />}
+      />
+      <FloatingLabelInput
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        icon={<Mail size={20} color={COLORS.textLight} />}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <FloatingLabelInput
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        icon={<Lock size={20} color={COLORS.textLight} />}
+      />
+
+      <TouchableOpacity
+        style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+        activeOpacity={0.8}
+        onPress={handleRegister}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator color={COLORS.white} />
+        ) : (
+          <Text style={styles.submitButtonText}>Daftar Sekarang</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Terms & Conditions */}
+      <Text style={styles.termsText}>
+        Dengan mendaftar, Anda menyetujui{' '}
+        <Text style={styles.termsLink}>Syarat & Ketentuan</Text> kami
+      </Text>
+    </>
   );
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <ScrollView contentContainerStyle={styles.content}>
-        <Animated.View
-          style={[
-            styles.card,
-            { opacity: fade, transform: [{ scale }] },
-          ]}
+  // ==================== MOBILE LAYOUT ====================
+  if (isMobile) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.mobileContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <Image
-            source={require('../../assets/iconmain.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <View style={styles.mobileCard}>
+            <Image source={LOGO_IMAGE} style={styles.logoMobile} resizeMode="contain" />
+            <Text style={styles.title}>Buat Akun</Text>
+            <Text style={styles.subtitle}>Daftar untuk memulai bisnis digital Anda</Text>
 
-          <Text style={styles.title}>Daftar Akun Baru</Text>
-          <Text style={styles.subtitle}>
-            Bergabung dengan SwiftStock dan mulai kelola produk Anda dengan mudah!
-          </Text>
+            {renderForm()}
 
-          <RegisterForm
-            fullName={register.fullName}
-            email={register.email}
-            password={register.password}
-            confirmPassword={register.confirmPassword}
-            loading={register.loading}
-            onFullNameChange={register.setFullName}
-            onEmailChange={register.setEmail}
-            onPasswordChange={register.setPassword}
-            onConfirmPasswordChange={register.setConfirmPassword}
-            onSubmit={register.submit}
-            onLoginPress={() => navigation.navigate('Login')}
-          />
-        </Animated.View>
+            <TouchableOpacity onPress={goToLogin} style={styles.toggleButtonMobile}>
+              <Text style={styles.toggleTextMobile}>
+                Sudah punya akun?{' '}
+                <Text style={styles.toggleLink}>Masuk</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
 
-        {!keyboardVisible && (
-          <Text style={styles.footer}>
-            Swiftstock by Efendi • © 2025
-          </Text>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+  // ==================== DESKTOP LAYOUT ====================
+  return (
+    <View style={styles.desktopBackground}>
+      <View style={styles.mainWrapper}>
+        <View style={styles.splitContainer}>
+          {/* LEFT SIDE - PROMO */}
+          <View style={styles.promoSection}>
+            <View style={styles.promoImageContainer}>
+              <Image source={REGISTER_IMAGE} style={styles.promoImage} resizeMode="cover" />
+              <LinearGradient
+                colors={['transparent', 'rgba(28, 58, 90, 0.7)', COLORS.primary]}
+                locations={[0, 0.6, 1]}
+                style={styles.promoOverlay}
+              >
+                <View style={styles.promoContent}>
+                  <Text style={styles.promoTitle}>Mulai Bisnis{'\n'}Digital Anda</Text>
+                  <Text style={styles.promoSubtitle}>
+                    Satu akun untuk semua kebutuhan kasir dan inventaris Anda.
+                  </Text>
+                </View>
+              </LinearGradient>
+            </View>
+          </View>
+
+          {/* RIGHT SIDE - FORM */}
+          <View style={styles.formSection}>
+            <ScrollView
+              contentContainerStyle={styles.formContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.formCard}>
+                <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
+                <Text style={styles.title}>Buat Akun</Text>
+                <Text style={styles.subtitle}>Daftar untuk memulai bisnis digital Anda</Text>
+
+                {renderForm()}
+
+                <View style={styles.footerRow}>
+                  <Text style={styles.footerText}>Sudah punya akun? </Text>
+                  <TouchableOpacity onPress={goToLogin}>
+                    <Text style={styles.toggleLink}>Masuk</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </View>
+    </View>
   );
 };
 
-export default RegisterScreen;
-
 const styles = StyleSheet.create({
+  // ==================== COMMON ====================
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
+
+  // ==================== DESKTOP ====================
+  desktopBackground: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainWrapper: {
+    width: '90%',
+    maxWidth: 1000,
+    height: '85%',
+    maxHeight: 700,
+    backgroundColor: COLORS.white,
+    borderRadius: 30,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: { boxShadow: '0px 20px 50px rgba(0,0,0,0.1)' },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: { elevation: 10 },
+    }),
+  },
+  splitContainer: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  formSection: {
+    width: '50%',
+    backgroundColor: COLORS.white,
+  },
+  formContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
+    alignItems: 'center',
+    padding: 40,
   },
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 24,
-    padding: 24,
-    elevation: 8,
+  formCard: {
+    width: '100%',
+    maxWidth: 350,
   },
-  logo: {
-    height: 60,
-    alignSelf: 'center',
+  promoSection: {
+    width: '50%',
+  },
+  promoImageContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  promoImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  promoOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 40,
+  },
+  promoContent: {
+    paddingBottom: 20,
+  },
+  promoTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'left',
+    lineHeight: 40,
     marginBottom: 12,
   },
+  promoSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 24,
+  },
+
+  // ==================== MOBILE ====================
+  mobileContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  mobileCard: {
+    backgroundColor: COLORS.white,
+    padding: 25,
+    borderRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
+  },
+
+  // ==================== SHARED ELEMENTS ====================
+  logo: {
+    width: 60,
+    height: 60,
+    alignSelf: 'center',
+    marginBottom: 15,
+  },
+  logoMobile: {
+    width: 50,
+    height: 50,
+    alignSelf: 'center',
+    marginBottom: 15,
+  },
   title: {
-    fontSize: 24,
+    fontSize: 26,
+    fontWeight: 'bold',
     textAlign: 'center',
-    color: COLORS.primary,
-    fontFamily: 'MontserratBold',
+    marginBottom: 8,
+    color: COLORS.textDark,
   },
   subtitle: {
-    fontSize: 13,
+    fontSize: 14,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 25,
     color: COLORS.textLight,
-    fontFamily: 'PoppinsRegular',
   },
-  footer: {
-    marginTop: 28,
+  submitButton: {
+    backgroundColor: COLORS.secondary,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 25,
+    minHeight: 55,
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  termsText: {
     textAlign: 'center',
+    marginTop: 15,
     fontSize: 12,
     color: COLORS.textLight,
-    fontFamily: 'PoppinsRegular',
+  },
+  termsLink: {
+    color: COLORS.primary,
+    fontWeight: '600',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 25,
+  },
+  footerText: {
+    color: COLORS.textLight,
+    fontSize: 14,
+  },
+  toggleLink: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  toggleButtonMobile: {
+    marginTop: 20,
+  },
+  toggleTextMobile: {
+    textAlign: 'center',
+    color: COLORS.textLight,
+    fontSize: 14,
   },
 });
+
+export default RegisterScreen;

@@ -18,9 +18,12 @@ import { RootStackParamList } from '../../../navigation/types';
 import { registerUser } from '../../../services/authService';
 import { COLORS } from '../../../constants/colors';
 import FloatingLabelInput from '../../../components/FloatingLabelInput';
-import ErrorModal from '../../Auth/ErrorModal';
+import ErrorModal from '../../auth/ErrorModal';
 
-type CreateCashierNavigationProp = NativeStackNavigationProp<RootStackParamList, 'CreateCashier'>;
+type CreateCashierNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'CreateCashier'
+>;
 
 const CreateCashierScreen = () => {
   const [displayName, setDisplayName] = useState('');
@@ -73,7 +76,10 @@ const CreateCashierScreen = () => {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
-      showErrorModal('Email Tidak Valid', 'Format email yang Anda masukkan tidak valid.');
+      showErrorModal(
+        'Email Tidak Valid',
+        'Format email yang Anda masukkan tidak valid.',
+      );
       return;
     }
 
@@ -90,10 +96,10 @@ const CreateCashierScreen = () => {
     setIsLoading(true);
     try {
       await registerUser(email.trim(), password, displayName.trim());
-      
+
       // Tampilkan success message
       setSuccessMessage('Akun kasir berhasil dibuat!');
-      
+
       // Reset form
       setDisplayName('');
       setEmail('');
@@ -105,7 +111,6 @@ const CreateCashierScreen = () => {
         setSuccessMessage('');
         navigation.goBack();
       }, 2000);
-
     } catch (error: any) {
       let errorTitle = 'Gagal Membuat Akun';
       let errorMessage = 'Terjadi kesalahan saat membuat akun kasir.';
@@ -115,10 +120,12 @@ const CreateCashierScreen = () => {
         errorMessage = 'Email ini sudah digunakan. Gunakan email lain.';
       } else if (error.code === 'auth/weak-password') {
         errorTitle = 'Password Lemah';
-        errorMessage = 'Password terlalu lemah. Gunakan kombinasi huruf dan angka.';
+        errorMessage =
+          'Password terlalu lemah. Gunakan kombinasi huruf dan angka.';
       } else if (error.code === 'auth/network-request-failed') {
         errorTitle = 'Koneksi Bermasalah';
-        errorMessage = 'Tidak dapat terhubung ke server. Periksa koneksi internet.';
+        errorMessage =
+          'Tidak dapat terhubung ke server. Periksa koneksi internet.';
       }
 
       showErrorModal(errorTitle, errorMessage);
@@ -130,18 +137,15 @@ const CreateCashierScreen = () => {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
+        showsVerticalScrollIndicator={false}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
-          disabled={isLoading}
-        >
+          disabled={isLoading}>
           <ArrowLeft size={24} color={COLORS.primary} />
         </TouchableOpacity>
 
@@ -152,8 +156,7 @@ const CreateCashierScreen = () => {
               opacity: fadeAnim,
               transform: [{ scale: scaleAnim }],
             },
-          ]}
-        >
+          ]}>
           <Text style={styles.title}>Buat Akun Kasir</Text>
           <Text style={styles.subtitle}>
             Tambahkan akun baru untuk staff kasir Anda
@@ -202,10 +205,12 @@ const CreateCashierScreen = () => {
           />
 
           <TouchableOpacity
-            style={[styles.createButton, isLoading && styles.createButtonDisabled]}
+            style={[
+              styles.createButton,
+              isLoading && styles.createButtonDisabled,
+            ]}
             onPress={handleCreateCashier}
-            disabled={isLoading}
-          >
+            disabled={isLoading}>
             {isLoading ? (
               <ActivityIndicator color={COLORS.white} />
             ) : (
@@ -214,7 +219,8 @@ const CreateCashierScreen = () => {
           </TouchableOpacity>
 
           <Text style={styles.noteText}>
-            * Akun yang dibuat akan memiliki role "Kasir" dan dapat langsung digunakan untuk transaksi.
+            * Akun yang dibuat akan memiliki role "Kasir" dan dapat langsung
+            digunakan untuk transaksi.
           </Text>
         </Animated.View>
       </ScrollView>

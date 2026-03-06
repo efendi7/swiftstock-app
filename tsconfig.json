@@ -5,6 +5,27 @@
     "esModuleInterop": true,
     "jsx": "react-native",
     "lib": ["DOM", "ESNext"],
-    "skipLibCheck": true
-  }
+    "skipLibCheck": true,
+    "target": "ESNext",
+    "moduleResolution": "bundler", // Ubah dari "node" ke "bundler"
+    "noEmit": true,
+    "baseUrl": ".", 
+    "paths": {
+      "@/*": ["*"],
+      "@components/*": ["components/*"],
+      "@screens/*": ["screens/*"],
+      "@services/*": ["services/*"],
+      "@constants/*": ["constants/*"],
+      "@hooks/*": ["hooks/*"],
+      "@layouts/*": ["layouts/*"],
+      "@assets/*": ["assets/*"],
+      "@navigation/*": ["navigation/*"]
+    }
+  },
+  "exclude": [
+    "node_modules", 
+    "babel.config.js", 
+    "metro.config.js", 
+    "jest.config.js"
+  ]
 }

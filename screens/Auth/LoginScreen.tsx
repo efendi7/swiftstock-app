@@ -1,317 +1,381 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ActivityIndicator,
   TouchableOpacity,
-  Animated,
-  Dimensions,
-  Keyboard,
   Platform,
   Image,
   ScrollView,
   KeyboardAvoidingView,
+  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Mail, Lock } from 'lucide-react-native';
-import { COLORS } from '../../constants/colors';
-import { loginUser, sendPasswordReset } from '../../services/authService';
-import FloatingLabelInput from '../../components/FloatingLabelInput';
-import ErrorModal from './ErrorModal';
-import ResetPasswordModal from './ResetPasswordModal';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
+
+// FIREBASE
+import { auth } from '@services/firebaseConfig';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+
+import FloatingLabelInput from '@components/FloatingLabelInput';
+
+const COLORS = {
+  primary: '#1C3A5A',
+  secondary: '#00A79D',
+  background: '#F5F5F5',
+  white: '#FFFFFF',
+  textDark: '#444444',
+  textLight: '#7f8c8d',
+} as const;
 
 const { width } = Dimensions.get('window');
+const isMobile = width < 768;
+
+const LOGIN_IMAGE = require('@assets/promo-login.jpg');
+const LOGO_IMAGE = require('@assets/iconmain.png');
 
 const LoginScreen = () => {
+  const navigation = useNavigation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
-  const [errorModal, setErrorModal] = useState({
-    visible: false,
-    title: '',
-    message: '',
-  });
-  const [resetPasswordModal, setResetPasswordModal] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
-
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
-  const shakeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 7,
-        tension: 40,
-        useNativeDriver: true,
-      }),
-    ]).start();
-
-    const showEvent =
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent =
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
-
-    const showSub = Keyboard.addListener(showEvent, () =>
-      setKeyboardVisible(true)
-    );
-    const hideSub = Keyboard.addListener(hideEvent, () =>
-      setKeyboardVisible(false)
-    );
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const shakeAnimation = () => {
-    Animated.sequence([
-      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(shakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const showErrorModal = (title: string, message: string) => {
-    shakeAnimation();
-    setErrorModal({ visible: true, title, message });
-  };
 
   const handleLogin = async () => {
-    if (!email.trim()) {
-      showErrorModal('Email Kosong', 'Silakan masukkan alamat email.');
-      return;
-    }
-
-    if (!password) {
-      showErrorModal('Password Kosong', 'Silakan masukkan password.');
+    if (!email || !password) {
+      alert('Harap lengkapi semua field.');
       return;
     }
 
     setIsLoading(true);
     try {
-      await loginUser(email.trim(), password);
+      await signInWithEmailAndPassword(auth, email, password);
+      // Navigation handled by AuthStateListener in AppNavigator
     } catch (error: any) {
-      showErrorModal(
-        error?.title || 'Login Gagal',
-        error?.message || 'Terjadi kesalahan saat login.'
-      );
+      console.error('❌ Login Error:', error);
+
+      let errorMessage = error.message;
+
+      if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Format email tidak valid.';
+      } else if (error.code === 'auth/user-not-found') {
+        errorMessage = 'Akun tidak ditemukan. Silakan daftar terlebih dahulu.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Password salah.';
+      } else if (error.code === 'auth/invalid-credential') {
+        errorMessage = 'Email atau password salah.';
+      }
+
+      alert(errorMessage);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSendPasswordReset = async (resetEmail: string) => {
-    try {
-      await sendPasswordReset(resetEmail);
-      setSuccessMessage('Link reset password telah dikirim ke email Anda.');
-      setTimeout(() => setSuccessMessage(''), 5000);
-    } catch (error: any) {
-      showErrorModal('Reset Password Gagal', error.message);
-      throw error;
-    }
+  const goToRegister = () => {
+    navigation.navigate('Register' as never);
   };
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
+  const renderForm = () => (
+    <>
+      <FloatingLabelInput
+        label="Email"
+        value={email}
+        onChangeText={setEmail}
+        icon={<Mail size={20} color={COLORS.textLight} />}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <FloatingLabelInput
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        icon={<Lock size={20} color={COLORS.textLight} />}
+      />
+
+      <TouchableOpacity
+        style={[styles.submitButton, isLoading && { opacity: 0.7 }]}
+        activeOpacity={0.8}
+        onPress={handleLogin}
+        disabled={isLoading}
       >
-        <Animated.View
-          style={[
-            styles.card,
-            {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }, { translateX: shakeAnim }],
-            },
-          ]}
+        {isLoading ? (
+          <ActivityIndicator color={COLORS.white} />
+        ) : (
+          <Text style={styles.submitButtonText}>Masuk</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Forgot Password */}
+      <TouchableOpacity style={styles.forgotButton}>
+        <Text style={styles.forgotText}>Lupa Password?</Text>
+      </TouchableOpacity>
+    </>
+  );
+
+  // ==================== MOBILE LAYOUT ====================
+  if (isMobile) {
+    return (
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          contentContainerStyle={styles.mobileContent}
+          keyboardShouldPersistTaps="handled"
         >
-          <Image
-            source={require('../../assets/iconmain.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
+          <View style={styles.mobileCard}>
+            <Image source={LOGO_IMAGE} style={styles.logoMobile} resizeMode="contain" />
+            <Text style={styles.title}>Selamat Datang</Text>
+            <Text style={styles.subtitle}>Masuk untuk melanjutkan</Text>
 
-          <Text style={styles.title}>Selamat Datang</Text>
-          <Text style={styles.subtitle}>
-            Silakan masuk untuk melanjutkan transaksi kasir.
-          </Text>
+            {renderForm()}
 
-          {successMessage ? (
-            <View style={styles.successBanner}>
-              <Text style={styles.successText}>{successMessage}</Text>
+            <TouchableOpacity onPress={goToRegister} style={styles.toggleButtonMobile}>
+              <Text style={styles.toggleTextMobile}>
+                Belum punya akun?{' '}
+                <Text style={styles.toggleLink}>Daftar Sekarang</Text>
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    );
+  }
+
+  // ==================== DESKTOP LAYOUT ====================
+  return (
+    <View style={styles.desktopBackground}>
+      <View style={styles.mainWrapper}>
+        <View style={styles.splitContainer}>
+          {/* LEFT SIDE - FORM */}
+          <View style={styles.formSection}>
+            <ScrollView
+              contentContainerStyle={styles.formContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.formCard}>
+                <Image source={LOGO_IMAGE} style={styles.logo} resizeMode="contain" />
+                <Text style={styles.title}>Selamat Datang</Text>
+                <Text style={styles.subtitle}>Masuk untuk melanjutkan</Text>
+
+                {renderForm()}
+
+                <View style={styles.footerRow}>
+                  <Text style={styles.footerText}>Belum punya akun? </Text>
+                  <TouchableOpacity onPress={goToRegister}>
+                    <Text style={styles.toggleLink}>Daftar Sekarang</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+
+          {/* RIGHT SIDE - PROMO */}
+          <View style={styles.promoSection}>
+            <View style={styles.promoImageContainer}>
+              <Image source={LOGIN_IMAGE} style={styles.promoImage} resizeMode="cover" />
+              <LinearGradient
+                colors={['transparent', 'rgba(28, 58, 90, 0.7)', COLORS.primary]}
+                locations={[0, 0.6, 1]}
+                style={styles.promoOverlay}
+              >
+                <View style={styles.promoContent}>
+                  <Text style={styles.promoTitle}>Kelola Toko{'\n'}Lebih Efisien</Text>
+                  <Text style={styles.promoSubtitle}>
+                    Satu akun untuk semua kebutuhan kasir dan inventaris Anda.
+                  </Text>
+                </View>
+              </LinearGradient>
             </View>
-          ) : null}
-
-          <FloatingLabelInput
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            icon={<Mail size={20} color={COLORS.textLight} />}
-            editable={!isLoading}
-          />
-
-          <FloatingLabelInput
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            icon={<Lock size={20} color={COLORS.textLight} />}
-            editable={!isLoading}
-          />
-
-          <TouchableOpacity
-            onPress={() => setResetPasswordModal(true)}
-            disabled={isLoading}
-            style={styles.forgotPassword}
-          >
-            <Text style={styles.forgotPasswordText}>Lupa Password?</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
-            onPress={handleLogin}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <Text style={styles.loginButtonText}>Masuk</Text>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.infoText}>
-            Akun dibuat oleh administrator sistem.
-          </Text>
-
-          {!isKeyboardVisible && (
-            <Text style={styles.footerText}>
-              Swiftstock by Efendi • © 2025
-            </Text>
-          )}
-        </Animated.View>
-      </ScrollView>
-
-      <ErrorModal
-        visible={errorModal.visible}
-        title={errorModal.title}
-        message={errorModal.message}
-        onClose={() => setErrorModal({ ...errorModal, visible: false })}
-      />
-
-      <ResetPasswordModal
-        visible={resetPasswordModal}
-        onClose={() => setResetPasswordModal(false)}
-        onSendReset={handleSendPasswordReset}
-      />
-    </KeyboardAvoidingView>
+          </View>
+        </View>
+      </View>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  // ==================== COMMON ====================
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollContent: {
+
+  // ==================== DESKTOP ====================
+  desktopBackground: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  mainWrapper: {
+    width: '90%',
+    maxWidth: 1000,
+    height: '85%',
+    maxHeight: 700,
+    backgroundColor: COLORS.white,
+    borderRadius: 30,
+    overflow: 'hidden',
+    ...Platform.select({
+      web: { boxShadow: '0px 20px 50px rgba(0,0,0,0.1)' },
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.1,
+        shadowRadius: 20,
+      },
+      android: { elevation: 10 },
+    }),
+  },
+  splitContainer: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  formSection: {
+    width: '50%',
+    backgroundColor: COLORS.white,
+  },
+  formContent: {
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 40,
+  },
+  formCard: {
+    width: '100%',
+    maxWidth: 350,
+  },
+  promoSection: {
+    width: '50%',
+  },
+  promoImageContainer: {
+    flex: 1,
+    position: 'relative',
+  },
+  promoImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  promoOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 40,
+  },
+  promoContent: {
+    paddingBottom: 20,
+  },
+  promoTitle: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: COLORS.white,
+    textAlign: 'left',
+    lineHeight: 40,
+    marginBottom: 12,
+  },
+  promoSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.95)',
+    textAlign: 'left',
+    lineHeight: 24,
+  },
+
+  // ==================== MOBILE ====================
+  mobileContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
     padding: 20,
   },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: COLORS.cardBg,
-    borderRadius: 25,
+  mobileCard: {
+    backgroundColor: COLORS.white,
     padding: 25,
-    elevation: 8,
+    borderRadius: 20,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
+
+  // ==================== SHARED ELEMENTS ====================
   logo: {
-    width: '100%',
+    width: 60,
     height: 60,
-    marginBottom: 10,
+    alignSelf: 'center',
+    marginBottom: 15,
+  },
+  logoMobile: {
+    width: 50,
+    height: 50,
+    alignSelf: 'center',
+    marginBottom: 15,
   },
   title: {
     fontSize: 26,
-    color: COLORS.primary,
+    fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 6,
-    fontFamily: 'PoppinsSemiBold',
+    marginBottom: 8,
+    color: COLORS.textDark,
   },
   subtitle: {
     fontSize: 14,
-    color: COLORS.textLight,
     textAlign: 'center',
     marginBottom: 25,
-    fontFamily: 'PoppinsRegular',
-  },
-  successBanner: {
-    backgroundColor: '#D4EDDA',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
-  },
-  successText: {
-    color: '#155724',
-    fontSize: 14,
-    textAlign: 'center',
-    fontFamily: 'PoppinsRegular',
-  },
-  forgotPassword: {
-    alignSelf: 'flex-end',
-    marginVertical: 8,
-  },
-  forgotPasswordText: {
-    color: COLORS.secondary,
-    fontSize: 14,
-    fontFamily: 'PoppinsSemiBold',
-  },
-  loginButton: {
-    backgroundColor: COLORS.secondary,
-    height: 55,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 15,
-  },
-  loginButtonDisabled: {
-    backgroundColor: COLORS.textLight,
-  },
-  loginButtonText: {
-    color: COLORS.white,
-    fontSize: 18,
-    fontFamily: 'PoppinsSemiBold',
-  },
-  infoText: {
-    marginTop: 20,
-    textAlign: 'center',
     color: COLORS.textLight,
-    fontSize: 13,
-    fontFamily: 'PoppinsRegular',
+  },
+  submitButton: {
+    backgroundColor: COLORS.secondary,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 25,
+    minHeight: 55,
+    justifyContent: 'center',
+  },
+  submitButtonText: {
+    color: COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  forgotButton: {
+    alignSelf: 'center',
+    marginTop: 15,
+    paddingVertical: 8,
+  },
+  forgotText: {
+    color: COLORS.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 25,
   },
   footerText: {
-    marginTop: 30,
-    fontSize: 12,
     color: COLORS.textLight,
+    fontSize: 14,
+  },
+  toggleLink: {
+    color: COLORS.primary,
+    fontWeight: 'bold',
+  },
+  toggleButtonMobile: {
+    marginTop: 20,
+  },
+  toggleTextMobile: {
     textAlign: 'center',
-    fontFamily: 'PoppinsRegular',
+    color: COLORS.textLight,
+    fontSize: 14,
   },
 });
 

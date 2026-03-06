@@ -1,28 +1,28 @@
 import React from 'react';
-import { View } from 'react-native';
-import { BaseRecentActivity } from '../../../../../components/dashboard/activity';
+import { BaseRecentActivity } from '../../../../../components/dashboard/activity/BaseRecentActivity';
 import { Activity } from '../../../../../types/activity';
 
 interface AdminActivityProps {
   activities: Activity[];
+  currentUserName: string;
   onSeeMore?: () => void;
-  currentUserName?: string;
+  tenantId: string; // ✅ TAMBAH: diteruskan ke BaseRecentActivity
 }
 
-export const AdminActivity: React.FC<AdminActivityProps> = ({ 
-  activities, 
+export const AdminActivity: React.FC<AdminActivityProps> = ({
+  activities,
+  currentUserName,
   onSeeMore,
-  currentUserName = "Admin" 
+  tenantId,
 }) => {
   return (
-    <View style={{ width: '100%' }}>
-      <BaseRecentActivity
-        activities={activities} // ✅ Hanya 5 aktivitas untuk preview
-        currentUserName={currentUserName}
-        title="Log Aktivitas Toko"
-        onSeeMore={onSeeMore} 
-        userRole="admin" // Kirimkan role sebagai "admin"
-      />
-    </View>
+    <BaseRecentActivity
+      activities={activities}
+      currentUserName={currentUserName}
+      userRole="admin"
+      title="Aktivitas Terbaru"
+      onSeeMore={onSeeMore}
+      tenantId={tenantId} // ✅ Teruskan ke BaseRecentActivity
+    />
   );
 };

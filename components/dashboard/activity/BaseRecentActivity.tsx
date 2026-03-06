@@ -13,7 +13,8 @@ interface BaseRecentActivityProps {
   onSeeMore?: () => void;
   title?: string;
   currentUserName: string;
-  userRole: string; // 1. Tambahkan prop ini
+  userRole: string;
+  tenantId: string; // ✅ TAMBAH: wajib untuk clearAllActivities
 }
 
 export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
@@ -21,7 +22,8 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
   onSeeMore,
   title = 'Aktivitas Terbaru',
   currentUserName,
-  userRole, // 2. Ambil dari props
+  userRole,
+  tenantId, // ✅ Terima prop tenantId
 }) => {
   const [, setTick] = useState(0);
 
@@ -32,25 +34,25 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // 3. Definisikan fungsi handleClear di sini
   const handleClear = () => {
     Alert.alert(
-      "Hapus Riwayat",
-      "Apakah Anda yakin ingin menghapus semua log aktivitas?",
+      'Hapus Riwayat',
+      'Apakah Anda yakin ingin menghapus semua log aktivitas?',
       [
-        { text: "Batal", style: "cancel" },
-        { 
-          text: "Hapus", 
-          style: "destructive", 
+        { text: 'Batal', style: 'cancel' },
+        {
+          text: 'Hapus',
+          style: 'destructive',
           onPress: async () => {
             try {
-              await DashboardService.clearAllActivities();
-              Alert.alert("Berhasil", "Log aktivitas telah dibersihkan.");
+              // ✅ FIX: Kirim tenantId ke clearAllActivities
+              await DashboardService.clearAllActivities(tenantId);
+              Alert.alert('Berhasil', 'Log aktivitas telah dibersihkan.');
             } catch (error) {
-              Alert.alert("Gagal", "Terjadi kesalahan saat menghapus log.");
+              Alert.alert('Gagal', 'Terjadi kesalahan saat menghapus log.');
             }
-          } 
-        }
+          },
+        },
       ]
     );
   };
@@ -60,27 +62,23 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
 
   return (
     <BaseCard variant="ultraSoft" style={styles.card}>
-      {/* 4. Kirimkan prop yang dibutuhkan ke ActivityHeader */}
-      <ActivityHeader 
-        title={title} 
-        showClear={userRole === 'admin' && hasActivities} 
-        onClear={handleClear} 
+      <ActivityHeader
+        title={title}
+        showClear={userRole === 'admin' && hasActivities}
+        onClear={handleClear}
       />
 
       {!hasActivities ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>
-            Belum ada aktivitas periode ini
-          </Text>
+          <Text style={styles.emptyText}>Belum ada aktivitas periode ini</Text>
         </View>
       ) : (
         <>
           <View style={styles.activitiesList}>
             {limitedActivities.map((activity, index) => {
-              const liveTime = activity.createdAt 
-                ? DashboardService.formatRelativeTime(activity.createdAt.toDate()) 
+              const liveTime = activity.createdAt
+                ? DashboardService.formatRelativeTime(activity.createdAt.toDate())
                 : 'Baru saja';
-
               return (
                 <ActivityItem
                   key={activity.id || index}
@@ -93,10 +91,7 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
           </View>
 
           {onSeeMore && (
-            <TouchableOpacity
-              style={styles.seeMoreBtn}
-              onPress={onSeeMore}
-            >
+            <TouchableOpacity style={styles.seeMoreBtn} onPress={onSeeMore}>
               <Text style={styles.seeMoreText}>Lihat Selengkapnya</Text>
               <ChevronRight size={14} color={COLORS.primary} />
             </TouchableOpacity>
@@ -108,35 +103,13 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
 };
 
 const styles = StyleSheet.create({
-  card: { 
-    padding: 18, 
-    marginBottom: 20 
-  },
-  activitiesList: { 
-    gap: 0 
-  },
-  emptyContainer: { 
-    paddingVertical: 20, 
-    alignItems: 'center' 
-  },
-  emptyText: { 
-    color: COLORS.textLight, 
-    fontSize: 12, 
-    fontFamily: 'PoppinsRegular' 
-  },
+  card: { padding: 18, marginBottom: 20 },
+  activitiesList: { gap: 0 },
+  emptyContainer: { paddingVertical: 20, alignItems: 'center' },
+  emptyText: { color: COLORS.textLight, fontSize: 12, fontFamily: 'PoppinsRegular' },
   seeMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 10,
-    paddingTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: '#F2F2F2',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginTop: 10, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#F2F2F2',
   },
-  seeMoreText: {
-    fontSize: 12,
-    color: COLORS.primary,
-    fontFamily: 'PoppinsMedium',
-    marginRight: 4,
-  },
+  seeMoreText: { fontSize: 12, color: COLORS.primary, fontFamily: 'PoppinsMedium', marginRight: 4 },
 });

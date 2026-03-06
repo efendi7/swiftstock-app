@@ -1,19 +1,28 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
 
+export type UserRole = 'superadmin' | 'admin' | 'cashier';
+
 export type RootStackParamList = {
-  // Tambahkan Onboarding di sini
+  // ==================== PUBLIC ROUTES ====================
+  LandingPage: undefined;
   Onboarding: undefined; 
-  
   Login: undefined;
   Register: undefined;
   
-  // NavigatorScreenParams digunakan untuk navigasi antar nested navigator
-  AdminTabs: NavigatorScreenParams<AdminTabParamList>; 
-  CashierTabs: NavigatorScreenParams<CashierTabParamList>; 
+  // ==================== WEB ROUTES ====================
+  Dashboard: undefined;
+  WebProducts: undefined;          // ✅ NEW
+  WebTransactions: undefined;      // ✅ NEW
+  WebCashierManagement: undefined; // ✅ NEW
+  WebSubscription: undefined;      // ✅ NEW
+  WebSettings: undefined;          // ✅ NEW
   
-  // Screen mandiri (Full Screen)
-  Cashier: undefined;   
-  CreateCashier: undefined; 
+  // ==================== MOBILE ROUTES ====================
+  AdminMobileNavigator: NavigatorScreenParams<AdminTabParamList>; 
+  CashierMobileNavigator: NavigatorScreenParams<CashierTabParamList>; 
+  
+  Cashier: undefined;    
+  ProductDetail: { productId: string };
 };
 
 export type AdminTabParamList = {
@@ -23,6 +32,8 @@ export type AdminTabParamList = {
   Profile: undefined;
   CreateCashier: undefined;  
   CashierManagement: undefined;
+  Settings: undefined;
+  Subscription: undefined;
 };
 
 export type CashierTabParamList = {

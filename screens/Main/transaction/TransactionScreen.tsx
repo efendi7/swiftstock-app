@@ -1,130 +1,165 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, StatusBar, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { View, StatusBar, StyleSheet, ActivityIndicator, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { useFocusEffect } from '@react-navigation/native';
+import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { History, BarChart3 } from 'lucide-react-native';
 
-import { db, auth } from '../../../services/firebaseConfig';
+import { COLORS } from '../../../constants/colors';
+import { useAuth } from '../../../hooks/auth/useAuth';
 import { ScreenHeader } from '../../../components/common/ScreenHeader';
 import { TransactionFilterSection, TransactionList } from '../../../components/transactions';
 import { FilterMode, SortType, Transaction } from '../../../types/transaction.type';
-import { COLORS } from '../../../constants/colors';
+import { TransactionService } from '../../../services/transactionService';
 
-const TransactionScreen = () => {
+const PAGE_SIZE = 20;
+
+const TransactionScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  
-  const currentUser = auth.currentUser;
+  const { tenantId, user, loading: authLoading } = useAuth();
+  const isAdmin = user?.role === 'admin';
 
-  // --- STATE FILTER & SEARCH ---
-  const [searchInput, setSearchInput] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [loadingMore,  setLoadingMore]  = useState(false);
+  const [hasMore,      setHasMore]      = useState(true);
+  const [totalCount,   setTotalCount]   = useState(0);
+
+  const lastDocRef   = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const hasLoadedRef = useRef(false);
+
+  const [searchInput,  setSearchInput]  = useState('');
+  const [filterMode,   setFilterMode]   = useState<FilterMode>('all');
   const [selectedSort, setSelectedSort] = useState<SortType>('latest');
-  // Menggunakan selectedDate (Date) alih-alih Month/Year untuk sinkronisasi dengan DatePicker
   const [selectedDate, setSelectedDate] = useState(new Date());
 
-  // Detect Role (Admin/Kasir)
-  useEffect(() => {
-    const checkRole = async () => {
-      const user = auth.currentUser;
-      if (user) {
-        const token = await user.getIdTokenResult();
-        setIsAdmin(token.claims.role === 'admin');
-      }
-    };
-    checkRole();
-  }, []);
+  const hasActiveFilter = searchInput !== '' || filterMode !== 'all' || selectedSort !== 'latest';
 
-  // Fetch Data Transaksi
-  const loadTransactions = useCallback(async () => {
+  // ── LOAD PERTAMA / REFRESH ────────────────────────────────
+  const loadFirstPage = useCallback(async () => {
+    if (!tenantId) { setLoading(false); return; }
     try {
-      setRefreshing(true);
-      const user = auth.currentUser;
-      if (!user) return;
+      setLoading(true);
+      lastDocRef.current = null;
 
-      let q;
-      const transactionsRef = collection(db, 'transactions');
+      const cashierId = isAdmin ? undefined : user?.uid;
+      const result    = await TransactionService.getTransactionsFirstPage(tenantId, PAGE_SIZE, cashierId);
 
-      if (isAdmin) {
-  q = query(transactionsRef, orderBy('date', 'desc')); // Ubah dari createdAt ke date
-} else {
-  q = query(
-    transactionsRef, 
-    where('cashierId', '==', user.uid), 
-    orderBy('date', 'desc') // Ubah dari createdAt ke date
-  );
-}
-
-      const snapshot = await getDocs(q);
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
-      setTransactions(list);
-    } catch (error) {
-      console.error('Error loading transactions:', error);
+      setTransactions(result.transactions);
+      setTotalCount(result.totalCount);
+      setHasMore(result.hasMore);
+      lastDocRef.current = result.lastDoc;
+    } catch (e) {
+      console.error('Error loading transactions:', e);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
-  }, [isAdmin]);
+  }, [tenantId, isAdmin, user?.uid]);
+
+  // ── LOAD MORE ─────────────────────────────────────────────
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || hasActiveFilter || !lastDocRef.current || !tenantId) return;
+    try {
+      setLoadingMore(true);
+      const cashierId = isAdmin ? undefined : user?.uid;
+      const result    = await TransactionService.getTransactionsNextPage(
+        tenantId, lastDocRef.current, PAGE_SIZE, cashierId
+      );
+      setTransactions(prev => [...prev, ...result.transactions]);
+      setHasMore(result.hasMore);
+      lastDocRef.current = result.lastDoc;
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [tenantId, isAdmin, user?.uid, loadingMore, hasMore, hasActiveFilter]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await loadFirstPage();
+    setRefreshing(false);
+  }, [loadFirstPage]);
 
   useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
+    if (tenantId && !authLoading) {
+      loadFirstPage();
+      hasLoadedRef.current = true;
+    }
+  }, [tenantId, authLoading]);
 
-  // --- LOGIKA FILTERING & SEARCHING ---
+  useFocusEffect(
+    useCallback(() => {
+      if (hasLoadedRef.current && tenantId) loadFirstPage();
+    }, [tenantId])
+  );
+
+  // ── CLIENT-SIDE FILTER (hanya saat filter aktif) ──────────
   const filteredData = useMemo(() => {
+    if (!hasActiveFilter) return transactions;
+
     let filtered = [...transactions];
 
-    // 1. Pencarian
     if (searchInput.trim()) {
       const lower = searchInput.toLowerCase();
-      filtered = filtered.filter(t => 
-        t.id.toLowerCase().includes(lower) || 
-        (t.transactionNumber || '').toLowerCase().includes(lower) || 
+      filtered = filtered.filter(t =>
+        t.id.toLowerCase().includes(lower) ||
+        (t.transactionNumber || '').toLowerCase().includes(lower) ||
         (t.cashierName || '').toLowerCase().includes(lower)
       );
     }
 
-  if (filterMode === 'today') {
-  const todayStr = new Date().toDateString();
-  filtered = filtered.filter(t => {
-    // Gunakan t.date karena di Firestore Anda fieldnya bernama 'date'
-    const transDate = t.date?.toDate?.() || t.createdAt?.toDate?.();
-    if (!transDate) return false;
-    return transDate.toDateString() === todayStr;
-  });
-}
-
-    // 3. Filter Waktu: Tanggal Spesifik (DatePicker)
-    if (filterMode === 'specificMonth') {
-      const selectedDateStr = selectedDate.toDateString();
+    if (filterMode === 'today') {
+      const todayStr = new Date().toDateString();
       filtered = filtered.filter(t => {
-        if (!t.createdAt) return false;
-        return t.createdAt.toDate().toDateString() === selectedDateStr;
+        const d = t.date?.toDate?.() ?? t.createdAt?.toDate?.();
+        return d ? d.toDateString() === todayStr : false;
       });
     }
 
-    // 4. Sortir
+    if (filterMode === 'specificMonth') {
+      const selStr = selectedDate.toDateString();
+      filtered = filtered.filter(t => {
+        const d = t.date?.toDate?.() ?? t.createdAt?.toDate?.();
+        return d ? d.toDateString() === selStr : false;
+      });
+    }
+
     filtered.sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-      const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
-      return selectedSort === 'latest' ? dateB - dateA : dateA - dateB;
+      const tA = a.date?.toDate?.()?.getTime() ?? 0;
+      const tB = b.date?.toDate?.()?.getTime() ?? 0;
+      return selectedSort === 'latest' ? tB - tA : tA - tB;
     });
 
     return filtered;
-  }, [transactions, searchInput, filterMode, selectedSort, selectedDate]);
+  }, [transactions, searchInput, filterMode, selectedSort, selectedDate, hasActiveFilter]);
 
-  // Konfigurasi UI Header
-  const userName = currentUser?.displayName || currentUser?.email?.split('@')[0] || 'User';
+  // ── FOOTER ────────────────────────────────────────────────
+  const renderFooter = () => {
+    if (hasActiveFilter) return null;
+    if (loadingMore) return (
+      <View style={styles.footerRow}>
+        <ActivityIndicator size="small" color={COLORS.secondary} />
+        <Text style={styles.loadMoreText}>Memuat lebih banyak...</Text>
+      </View>
+    );
+    if (!hasMore && transactions.length > 0) return (
+      <View style={styles.footerRow}>
+        <Text style={styles.endText}>Semua {totalCount} transaksi ditampilkan</Text>
+      </View>
+    );
+    return null;
+  };
+
+  const userName    = user?.displayName || user?.email?.split('@')[0] || 'User';
   const headerTitle = isAdmin ? `Semua Riwayat\nTransaksi` : `Riwayat Transaksi\nSaya`;
-  const headerIcon = isAdmin ? <BarChart3 size={28} color="#FFF" /> : <History size={28} color="#FFF" />;
+  const headerIcon  = isAdmin ? <BarChart3 size={28} color="#FFF" /> : <History size={28} color="#FFF" />;
 
-  if (loading && transactions.length === 0) {
+  if ((loading || authLoading) && transactions.length === 0) {
     return (
       <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={COLORS.secondary} />
       </View>
     );
   }
@@ -132,26 +167,22 @@ const TransactionScreen = () => {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-      
-      <ScreenHeader 
-        title={headerTitle}
-        subtitle={userName}
-        icon={headerIcon}
-      />
+
+      <ScreenHeader title={headerTitle} subtitle={userName} icon={headerIcon} />
 
       <View style={styles.contentWrapper}>
-        <View style={styles.filterSearchContainer}>
+        <View style={styles.filterContainer}>
           <TransactionFilterSection
             searchInput={searchInput}
             onSearchChange={setSearchInput}
             filterMode={filterMode}
             selectedSort={selectedSort}
-            selectedDate={selectedDate} // Prop Baru
+            selectedDate={selectedDate}
             transactionCount={filteredData.length}
             isAdmin={isAdmin}
             onFilterChange={setFilterMode}
             onSortChange={setSelectedSort}
-            onDateChange={setSelectedDate} // Prop Baru
+            onDateChange={setSelectedDate}
           />
         </View>
 
@@ -159,9 +190,12 @@ const TransactionScreen = () => {
           transactions={filteredData}
           searchInput={searchInput}
           isAdmin={isAdmin}
-          refetch={loadTransactions}
+          refetch={handleRefresh}
           insets={insets}
           refreshing={refreshing}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.3}
+          ListFooterComponent={renderFooter()}
         />
       </View>
     </View>
@@ -169,27 +203,13 @@ const TransactionScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: COLORS.primary 
-  },
-  loaderContainer: { 
-    flex: 1, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    backgroundColor: '#F8FAFC' 
-  },
-  contentWrapper: { 
-    flex: 1, 
-    backgroundColor: '#F8FAFC', 
-    borderTopLeftRadius: 30, 
-    borderTopRightRadius: 30, 
-    marginTop: -20, 
-    overflow: 'visible' // Diganti ke 'visible' agar bayangan kartu filter tidak terpotong
-  },
-  filterSearchContainer: { 
-    paddingTop: 8,
-  }
+  container:       { flex: 1, backgroundColor: COLORS.primary },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  contentWrapper:  { flex: 1, backgroundColor: '#F8FAFC', borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -20, overflow: 'visible' },
+  filterContainer: { paddingTop: 8 },
+  footerRow:       { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 16, gap: 8 },
+  loadMoreText:    { fontSize: 12, fontFamily: 'PoppinsMedium', color: COLORS.secondary },
+  endText:         { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#94A3B8' },
 });
 
 export default TransactionScreen;

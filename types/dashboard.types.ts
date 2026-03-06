@@ -1,4 +1,3 @@
-// Pastikan ada kata kunci export di depan setiap interface
 export interface DateRange {
   startDate: Date;
   endDate: Date;
@@ -24,11 +23,19 @@ export interface DashboardStats {
   lowStockCount: number;
   totalIn: number;
   totalOut: number;
+  totalNewProducts?: number;        // ✅ BARU: produk baru periode ini
+
+  // Chart penjualan (sudah ada)
   weeklyData: ChartDataPoint[];
-  dateRange?: DateRange;
+
+  // ✅ BARU: Chart stok masuk — 3 metrik
+  stockUnitData?:  ChartDataPoint[]; // jumlah unit masuk per periode
+  stockValueData?: ChartDataPoint[]; // nilai rupiah per periode
+  stockNewData?:   ChartDataPoint[]; // produk baru ditambahkan per periode
+
   stockRanking: ProductStat[];
   salesRanking: ProductStat[];
-  dateRangeLabel?: string;  // ✨ TAMBAHKAN INI untuk label chart
+  dateRangeLabel?: string;
   userName?: string;
   photoURL?: string | null;
 }

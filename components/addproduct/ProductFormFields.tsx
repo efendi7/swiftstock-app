@@ -40,7 +40,7 @@ export interface ProductFormFieldsProps {
   onScanPress: () => void;
   onAutoGeneratePress: () => void;
   onAddCategoryPress: () => void;
-  onStockOpname: () => void; // ✅ Menambahkan prop yang kurang
+  onStockOpname: () => void; 
   onFieldFocus?: (y: number) => void;
   isEditable?: boolean;
 }
@@ -67,7 +67,7 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
   onScanPress,
   onAutoGeneratePress,
   onAddCategoryPress,
-  onStockOpname, // ✅ Destructure prop disini
+  onStockOpname,
   onFieldFocus,
   isEditable = true,
 }) => {
@@ -160,7 +160,6 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
               setIsFocus(false);
             }}
             disable={!isEditable}
-            containerStyle={{ zIndex: 1000 }}
           />
           {isEditable && (
             <TouchableOpacity
@@ -243,7 +242,7 @@ export const ProductFormFields: React.FC<ProductFormFieldsProps> = ({
             {isEditable && (
               <TouchableOpacity
                 style={styles.opnameBtn}
-                onPress={onStockOpname} // ✅ Memanggil prop onStockOpname
+                onPress={onStockOpname} 
               >
                 <Text style={styles.opnameText}>Stock Opname</Text>
               </TouchableOpacity>

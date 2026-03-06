@@ -1,229 +1,255 @@
 import { 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  serverTimestamp, 
-  writeBatch, 
-  doc, 
-  setDoc,
-  increment,
-  getDoc
+  collection, query, where, getDocs, serverTimestamp,
+  writeBatch, doc, setDoc, increment, getDoc,
+  orderBy, limit, startAfter,
+  QueryDocumentSnapshot, DocumentData, getCountFromServer,
+  Timestamp,
 } from 'firebase/firestore';
 import { db, auth } from './firebaseConfig';
 import { ProductFormData, ProductValidationResult } from '../types/product.types';
 
-const CLOUD_NAME = 'dlkrdbabo'; 
-const UPLOAD_PRESET = 'expo_products'; 
+const CLOUD_NAME   = 'dlkrdbabo';
+const UPLOAD_PRESET = 'expo_products';
+
+export interface PaginatedProducts {
+  products:   any[];
+  totalCount: number;
+  lastDoc:    QueryDocumentSnapshot<DocumentData> | null;
+  hasMore:    boolean;
+}
 
 export class ProductService {
 
-// Bagian logActivity yang diperbaiki
-private static async logActivity(batch: any, type: 'IN' | 'OUT' | 'UPDATE' | 'TAMBAH', message: string) {
-  const activityRef = doc(collection(db, 'activities'));
-  const user = auth.currentUser;
-  
-  // Gunakan displayName jika ada, jika tidak ada gunakan email, default 'Admin'
-  const userName = user?.displayName || user?.email?.split('@')[0] || 'Admin';
-  
-  batch.set(activityRef, {
-    type, 
-    message,
-    userName, 
-    userId: user?.uid,
-    createdAt: serverTimestamp(),
-  });
-}
+  private static async logActivity(
+    batch: any, tenantId: string,
+    type: 'IN' | 'OUT' | 'UPDATE' | 'TAMBAH', message: string
+  ) {
+    const activityRef = doc(collection(db, 'tenants', tenantId, 'activities'));
+    const user = auth.currentUser;
+    batch.set(activityRef, {
+      type, message,
+      userName: user?.displayName || user?.email?.split('@')[0] || 'Admin',
+      userId:   user?.uid,
+      createdAt: serverTimestamp(),
+    });
+  }
 
-  // --- LOGIKA KATEGORI ---
-  static async addCategory(name: string): Promise<void> {
-    const categoryName = name.trim();
-    if (!categoryName) throw new Error("Nama kategori tidak boleh kosong");
+  // ─────────────────────────────────────────────────────────
+  // STOCK PURCHASES — catat otomatis saat tambah/update stok
+  // ─────────────────────────────────────────────────────────
+  private static recordStockPurchase(
+    batch: any,
+    tenantId: string,
+    data: {
+      productId:     string;
+      productName:   string;
+      quantity:      number;
+      purchasePrice: number;
+      isNewProduct?: boolean;
+    }
+  ) {
+    if (data.quantity <= 0) return; // tidak catat jika stok tidak bertambah
+    const user = auth.currentUser;
+    const ref  = doc(collection(db, 'tenants', tenantId, 'stock_purchases'));
+    batch.set(ref, {
+      productId:     data.productId,
+      productName:   data.productName,
+      quantity:      data.quantity,
+      purchasePrice: data.purchasePrice,
+      totalCost:     data.quantity * data.purchasePrice,
+      isNewProduct:  data.isNewProduct ?? false,
+      addedBy:       user?.displayName || user?.email?.split('@')[0] || 'Admin',
+      date:          serverTimestamp(), // ✅ FIX: pakai serverTimestamp agar konsisten dengan query
+      createdAt:     serverTimestamp(),
+    });
+  }
 
-    const q = query(collection(db, 'categories'), where('name', '==', categoryName));
-    const snap = await getDocs(q);
-    if (!snap.empty) throw new Error("Kategori ini sudah ada");
+  // ── PAGINATION ────────────────────────────────────────────
 
+  static async getProductsFirstPage(
+    tenantId: string, pageSize = 20
+  ): Promise<PaginatedProducts> {
     try {
-      const categoryRef = doc(collection(db, 'categories'));
-      await setDoc(categoryRef, {
-        name: categoryName,
-        createdAt: serverTimestamp()
-      });
+      const col      = collection(db, 'tenants', tenantId, 'products');
+      const countSnap = await getCountFromServer(col);
+      const q        = query(col, orderBy('createdAt', 'desc'), limit(pageSize));
+      const snap     = await getDocs(q);
+      return {
+        products:   snap.docs.map(d => ({ ...d.data(), id: d.id, soldCount: d.data().soldCount || 0 })),
+        totalCount: countSnap.data().count,
+        lastDoc:    snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+        hasMore:    snap.docs.length === pageSize,
+      };
     } catch (error: any) {
-      console.error('Error addCategory:', error);
-      throw new Error("Gagal menambah kategori");
+      throw new Error('Gagal memuat produk: ' + error.message);
     }
   }
 
-  static async getCategories(): Promise<{label: string, value: string}[]> {
+  static async getProductsNextPage(
+    tenantId: string, lastDoc: QueryDocumentSnapshot<DocumentData>, pageSize = 20
+  ): Promise<PaginatedProducts> {
     try {
-      const q = query(collection(db, 'categories'));
-      const snap = await getDocs(q);
-      return snap.docs.map(doc => ({
-        label: doc.data().name,
-        value: doc.data().name
-      }));
-    } catch (error) {
-      return [];
+      const col       = collection(db, 'tenants', tenantId, 'products');
+      const countSnap = await getCountFromServer(col);
+      const q         = query(col, orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(pageSize));
+      const snap      = await getDocs(q);
+      const newLast   = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+      return {
+        products:   snap.docs.map(d => ({ ...d.data(), id: d.id, soldCount: d.data().soldCount || 0 })),
+        totalCount: countSnap.data().count,
+        lastDoc:    newLast,
+        hasMore:    snap.docs.length === pageSize,
+      };
+    } catch (error: any) {
+      throw new Error('Gagal memuat halaman berikutnya: ' + error.message);
     }
   }
 
-  // --- OPERASI PRODUK ---
-  static async addProduct(data: ProductFormData): Promise<void> {
+  // ── CATEGORIES ────────────────────────────────────────────
+
+  static async addCategory(tenantId: string, name: string): Promise<void> {
+    const categoryName = name.trim();
+    if (!categoryName) throw new Error('Nama kategori tidak boleh kosong');
+    const categoryCol = collection(db, 'tenants', tenantId, 'categories');
+    const snap = await getDocs(query(categoryCol, where('name', '==', categoryName)));
+    if (!snap.empty) throw new Error('Kategori ini sudah ada');
+    await setDoc(doc(categoryCol), { name: categoryName, createdAt: serverTimestamp() });
+  }
+
+  static async getCategories(tenantId: string): Promise<{ label: string; value: string }[]> {
+    try {
+      const snap = await getDocs(query(collection(db, 'tenants', tenantId, 'categories')));
+      return snap.docs.map(d => ({ label: d.data().name, value: d.data().name }));
+    } catch { return []; }
+  }
+
+  // ── ADD PRODUCT ───────────────────────────────────────────
+
+  static async addProduct(tenantId: string, data: ProductFormData): Promise<string> {
     const validation = this.validateProduct(data);
     if (!validation.isValid) throw new Error(validation.error);
-    
-    const q = query(collection(db, 'products'), where('barcode', '==', data.barcode.trim()));
-    const querySnapshot = await getDocs(q);
-    if (!querySnapshot.empty) throw new Error('Barcode sudah terdaftar.');
+
+    const productCol = collection(db, 'tenants', tenantId, 'products');
+    const dupSnap    = await getDocs(query(productCol, where('barcode', '==', data.barcode.trim())));
+    if (!dupSnap.empty) throw new Error('Barcode sudah terdaftar di toko Anda.');
 
     try {
-      const batch = writeBatch(db);
-      const productRef = doc(collection(db, 'products'));
-      const metadataRef = doc(db, 'metadata', 'dashboard');
-      const stockQty = parseInt(data.stock);
-      const productName = data.name.trim();
-      
+      const batch       = writeBatch(db);
+      const productRef  = doc(productCol);
+      const metadataRef = doc(db, 'tenants', tenantId, 'metadata', 'dashboard');
+      const stockQty    = parseInt(data.stock);
+      const purchasePrice = parseFloat(data.purchasePrice);
+
       batch.set(productRef, {
-        name: productName,
-        price: parseFloat(data.price),
-        purchasePrice: parseFloat(data.purchasePrice),
-        supplier: data.supplier?.trim() || 'Umum',
-        category: data.category?.trim() || 'Tanpa Kategori',
-        stock: stockQty,
-        soldCount: 0,
-        barcode: data.barcode.trim(),
-        barcodeType: data.barcode.length === 13 ? 'EAN13' : 'CODE128', 
-        imageUrl: data.imageUrl || '', 
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        ...data,
+        name:          data.name.trim(),
+        price:         parseFloat(data.price),
+        purchasePrice,
+        stock:         stockQty,
+        soldCount:     0,
+        barcodeType:   data.barcode.length === 13 ? 'EAN13' : 'CODE128',
+        createdAt:     serverTimestamp(),
+        updatedAt:     serverTimestamp(),
       });
 
-      const metadataSnap = await getDoc(metadataRef);
-      if (!metadataSnap.exists()) {
+      // ✅ Catat ke stock_purchases sebagai produk baru
+      this.recordStockPurchase(batch, tenantId, {
+        productId:     productRef.id,
+        productName:   data.name.trim(),
+        quantity:      stockQty,
+        purchasePrice,
+        isNewProduct:  true,
+      });
+
+      const metaSnap = await getDoc(metadataRef);
+      if (!metaSnap.exists()) {
         batch.set(metadataRef, { totalProducts: 1, lastUpdated: serverTimestamp() });
       } else {
         batch.update(metadataRef, { totalProducts: increment(1), lastUpdated: serverTimestamp() });
       }
 
-      this.logActivity(batch, 'TAMBAH', `Mendaftarkan produk baru "${productName}" dengan stok awal ${stockQty} unit`);
+      this.logActivity(batch, tenantId, 'TAMBAH', `Produk baru "${data.name.trim()}" stok: ${stockQty}`);
       await batch.commit();
+      return productRef.id;
+
     } catch (error: any) {
-      throw new Error('Gagal menyimpan produk: ' + error.message);
+      throw new Error('Gagal: ' + error.message);
     }
   }
 
+  // ── UPDATE PRODUCT ────────────────────────────────────────
+
   static async updateProduct(
-    productId: string,
-    data: ProductFormData,
-    oldData: {
-      name: string;
-      stock: number;
-      price: number;
-      purchasePrice: number;
-      category: string;
-      supplier: string;
-    }
+    tenantId: string, productId: string,
+    data: ProductFormData, oldData: any
   ): Promise<void> {
-    const validation = this.validateProduct(data);
-    if (!validation.isValid) throw new Error(validation.error);
-
     try {
-      const batch = writeBatch(db);
-      const productRef = doc(db, 'products', productId);
-      
-      const newStock = parseInt(data.stock) || 0;
-      const newName = data.name.trim();
-      const newPrice = parseFloat(data.price);
-      const newPurchasePrice = parseFloat(data.purchasePrice);
-      const newCategory = data.category?.trim() || 'Tanpa Kategori';
-      const newSupplier = data.supplier?.trim() || 'Umum';
-
+      const batch      = writeBatch(db);
+      const productRef = doc(db, 'tenants', tenantId, 'products', productId);
+      const newStock   = parseInt(data.stock) || 0;
+      const purchasePrice = parseFloat(data.purchasePrice);
       const changes: string[] = [];
-      
-      // DETEKSI PERUBAHAN FIELD RINCI
-      if (oldData.name !== newName) {
-        changes.push(`nama dari "${oldData.name}" menjadi "${newName}"`);
-      }
-      if (oldData.price !== newPrice) {
-        changes.push(`harga jual dari Rp ${oldData.price.toLocaleString('id-ID')} menjadi Rp ${newPrice.toLocaleString('id-ID')}`);
-      }
-      if (oldData.purchasePrice !== newPurchasePrice) {
-        changes.push(`harga beli dari Rp ${oldData.purchasePrice.toLocaleString('id-ID')} menjadi Rp ${newPurchasePrice.toLocaleString('id-ID')}`);
-      }
-      if (oldData.category !== newCategory) {
-        changes.push(`kategori dari "${oldData.category}" menjadi "${newCategory}"`);
-      }
-      if (oldData.supplier !== newSupplier) {
-        changes.push(`supplier dari "${oldData.supplier}" menjadi "${newSupplier}"`);
-      }
 
-      // 1. LOG UPDATE DATA (NAMA, HARGA, DLL)
+      if (oldData.name  !== data.name)              changes.push(`nama: ${oldData.name} → ${data.name}`);
+      if (oldData.price !== parseFloat(data.price)) changes.push(`harga: ${oldData.price} → ${data.price}`);
       if (changes.length > 0) {
-        this.logActivity(
-          batch, 
-          'UPDATE', 
-          `Update data produk "${oldData.name}": ${changes.join(', ')}`
-        );
+        this.logActivity(batch, tenantId, 'UPDATE', `Update "${oldData.name}": ${changes.join(', ')}`);
       }
 
-      // 2. LOG PERUBAHAN STOK (TERPISAH)
       if (newStock !== oldData.stock) {
-  const diff = newStock - oldData.stock;
-  this.logActivity(
-    batch, 
-    diff > 0 ? 'IN' : 'OUT', // Gunakan 'IN' untuk stok masuk
-    `Stok "${newName}" ${diff > 0 ? 'ditambah' : 'dikurangi'} sebanyak ${Math.abs(diff)} unit (${oldData.stock} → ${newStock})`
-  );
-}
+        const diff = newStock - oldData.stock;
+        this.logActivity(
+          batch, tenantId,
+          diff > 0 ? 'IN' : 'OUT',
+          `Stok "${data.name}" ${diff > 0 ? 'masuk' : 'keluar'} ${Math.abs(diff)} unit`
+        );
 
-      // Eksekusi update produk ke koleksi 'products'
+        // ✅ Catat ke stock_purchases hanya jika stok BERTAMBAH
+        if (diff > 0) {
+          this.recordStockPurchase(batch, tenantId, {
+            productId,
+            productName:   data.name.trim(),
+            quantity:      diff,
+            purchasePrice,
+            isNewProduct:  false,
+          });
+        }
+      }
+
       batch.update(productRef, {
-        name: newName,
-        price: newPrice,
-        purchasePrice: newPurchasePrice,
-        supplier: newSupplier,
-        category: newCategory,
-        stock: newStock,
-        barcode: data.barcode.trim(),
-        imageUrl: data.imageUrl || '',
-        updatedAt: serverTimestamp()
+        ...data,
+        price:         parseFloat(data.price),
+        purchasePrice,
+        stock:         newStock,
+        updatedAt:     serverTimestamp(),
       });
-      
+
       await batch.commit();
     } catch (error: any) {
       throw new Error('Gagal update: ' + error.message);
     }
   }
 
-  // --- VALIDASI & HELPER ---
+  // ── UTILITIES ─────────────────────────────────────────────
+
   static validateProduct(data: ProductFormData): ProductValidationResult {
     const { name, price, purchasePrice, stock, barcode } = data;
-    if (!name || !price || !purchasePrice || !stock || !barcode) {
+    if (!name || !price || !purchasePrice || !stock || !barcode)
       return { isValid: false, error: 'Silakan isi semua data wajib.' };
-    }
-    if (parseFloat(price) < parseFloat(purchasePrice)) {
-      return { isValid: false, error: 'Harga jual tidak boleh di bawah harga beli.' };
-    }
     return { isValid: true };
   }
 
   static generateUniqueBarcode(type: 'EAN13' | 'CODE128'): string {
     if (type === 'EAN13') {
-      const prefix = '899';
-      const randomDigits = Math.floor(Math.random() * 1000000000).toString().padStart(9, '0');
-      const base = prefix + randomDigits;
+      const prefix       = '899';
+      const randomDigits = Math.floor(Math.random() * 1_000_000_000).toString().padStart(9, '0');
+      const base         = prefix + randomDigits;
       let sum = 0;
       for (let i = 0; i < 12; i++) sum += parseInt(base[i]) * (i % 2 === 0 ? 1 : 3);
-      const checksum = (10 - (sum % 10)) % 10;
-      return base + checksum.toString();
-    } else {
-      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-      let result = '';
-      for (let i = 0; i < 15; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-      return result;
+      return base + ((10 - (sum % 10)) % 10).toString();
     }
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length: 15 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   }
 
   static async uploadImage(localUri: string): Promise<string> {
@@ -231,9 +257,8 @@ private static async logActivity(batch: any, type: 'IN' | 'OUT' | 'UPDATE' | 'TA
     data.append('file', { uri: localUri, type: 'image/jpeg', name: 'product.jpg' } as any);
     data.append('upload_preset', UPLOAD_PRESET);
     data.append('cloud_name', CLOUD_NAME);
-
-    const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: data });
-    const result = await response.json();
+    const res    = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/upload`, { method: 'POST', body: data });
+    const result = await res.json();
     return result.secure_url;
   }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   View,
   Text,
@@ -15,9 +15,9 @@ import { Eye, EyeOff } from 'lucide-react-native';
 
 const COLORS = {
   primary: '#00A79D',
-  borderNormal: '#bdc3c7',
-  labelNormal: '#7f8c8d',
-  text: '#34495e',
+  borderNormal: '#E2E8F0',
+  labelNormal: '#94A3B8',
+  text: '#1E293B',
   textDisabled: '#94A3B8',
   background: '#FFFFFF',
   backgroundDisabled: '#F8FAFC',
@@ -34,7 +34,7 @@ interface FloatingLabelInputProps extends TextInputProps {
   onFocusCallback?: (y: number) => void;
 }
 
-const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
+const FloatingLabelInput = forwardRef<any, FloatingLabelInputProps>(({
   label,
   value,
   onChangeText,
@@ -45,10 +45,17 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
   onFocusCallback,
   editable = true,
   ...rest
-}) => {
+}, ref) => {
   const [isFocused, setIsFocused] = useState(false);
   const [secure, setSecure] = useState(!!isPassword);
   const containerRef = useRef<View>(null);
+  const inputRef = useRef<TextInput>(null);
+
+  // Expose ref ke parent
+  useImperativeHandle(ref, () => ({
+    focus: () => inputRef.current?.focus(),
+    blur: () => inputRef.current?.blur(),
+  }));
 
   const floatAnim = useRef(new Animated.Value(value ? 1 : 0)).current;
 
@@ -61,22 +68,23 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
     }).start();
   }, [isFocused, value]);
 
+  // Interpolasi Animasi
   const translateY = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, -26], 
+    outputRange: [0, -25], 
   });
 
   const scale = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 0.75],
+    outputRange: [1, 0.8],
   });
 
   const translateX = floatAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [icon ? 30 : 0, icon ? -4 : 0],
+    outputRange: [icon ? 28 : 0, -2],
   });
 
-  const labelColor = isFocused ? COLORS.primary : (editable ? COLORS.labelNormal : COLORS.textDisabled);
+  const labelColor = isFocused ? COLORS.primary : COLORS.labelNormal;
   const borderColor = isFocused ? COLORS.primary : COLORS.borderNormal;
   const backgroundColor = editable ? COLORS.background : COLORS.backgroundDisabled;
 
@@ -94,14 +102,12 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
     <View ref={containerRef} style={[styles.container, { borderColor, backgroundColor }]}>
       <Animated.Text
         numberOfLines={1}
-        ellipsizeMode="tail"
         style={[
           styles.label,
           {
             transform: [{ translateY }, { translateX }, { scale }],
             color: labelColor,
-            maxWidth: '90%',
-            backgroundColor,
+            backgroundColor: backgroundColor, // Background label harus sama dengan container
           },
           labelStyle,
         ]}
@@ -113,11 +119,9 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
         {icon && <View style={styles.iconContainer}>{icon}</View>}
 
         {!editable && value ? (
-          // Read-only dengan ScrollView horizontal
           <ScrollView 
             horizontal 
             showsHorizontalScrollIndicator={false}
-            style={styles.scrollViewContainer}
             contentContainerStyle={styles.scrollViewContent}
           >
             <Text style={[styles.readOnlyText, inputStyle]}>
@@ -125,18 +129,23 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
             </Text>
           </ScrollView>
         ) : (
-          // Editable TextInput
           <TextInput
             {...rest}
+            ref={inputRef}
             value={value}
             onChangeText={onChangeText}
-            style={[styles.input, inputStyle, !editable && styles.inputDisabled]}
+            style={[
+              styles.input, 
+              inputStyle, 
+              !editable && styles.inputDisabled,
+              Platform.OS === 'web' && { outlineStyle: 'none' } as any
+            ]}
             secureTextEntry={secure}
-            cursorColor={COLORS.primary}
             onFocus={handleFocus}
             onBlur={() => setIsFocused(false)}
             placeholder=""
             editable={editable}
+            selectionColor={COLORS.primary}
           />
         )}
 
@@ -144,10 +153,10 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
           <TouchableOpacity
             onPress={() => setSecure(!secure)}
             style={styles.eyeIcon}
-            activeOpacity={0.7}
+            activeOpacity={0.5}
           >
             {secure ? (
-              <EyeOff size={18} color={isFocused ? COLORS.primary : COLORS.labelNormal} />
+              <EyeOff size={18} color={COLORS.labelNormal} />
             ) : (
               <Eye size={18} color={COLORS.primary} />
             )}
@@ -156,80 +165,61 @@ const FloatingLabelInput: React.FC<FloatingLabelInputProps> = ({
       </View>
     </View>
   );
-};
+});
 
 const styles = StyleSheet.create({
   container: {
-    height: 50,
+    height: 52,
     borderWidth: 1.5,
     borderRadius: 12,
     marginBottom: 16,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     justifyContent: 'center',
-    backgroundColor: COLORS.background,
+    position: 'relative',
   },
   label: {
     position: 'absolute',
-    left: 10,
-    backgroundColor: COLORS.background,
+    left: 12,
     paddingHorizontal: 4,
-    fontSize: 13,
+    fontSize: 14,
     fontFamily: 'PoppinsRegular',
     zIndex: 1,
-    top: 14,
-    alignSelf: 'flex-start',
+    // Menghindari label menutupi border saat mengambang
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-    marginTop: 2,
+    height: '100%',
   },
   iconContainer: {
-    marginRight: 6,
+    marginRight: 8,
     width: 20,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   input: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     color: COLORS.text,
-    fontFamily: 'PoppinsRegular',
-    ...Platform.select({
-      android: {
-        paddingVertical: 0,
-        textAlignVertical: 'center',
-      },
-      ios: {
-        paddingVertical: 6,
-      }
-    }),
+    fontFamily: 'PoppinsMedium',
+    height: '100%',
+    padding: 0,
   },
   inputDisabled: {
     color: COLORS.textDisabled,
   },
-  scrollViewContainer: {
-    flex: 1,
-  },
   scrollViewContent: {
     alignItems: 'center',
-    paddingRight: 10, // Extra padding untuk scroll
+    paddingVertical: 10,
   },
   readOnlyText: {
-    fontSize: 13,
+    fontSize: 14,
     color: COLORS.textDisabled,
-    fontFamily: 'PoppinsRegular',
-    ...Platform.select({
-      android: {
-        textAlignVertical: 'center',
-      },
-      ios: {
-        lineHeight: 18,
-      }
-    }),
+    fontFamily: 'PoppinsMedium',
   },
   eyeIcon: {
-    paddingLeft: 6,
+    padding: 8,
+    marginRight: -8,
   },
 });
 

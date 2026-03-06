@@ -2,23 +2,16 @@ import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { ProductService } from '../services/productService';
-import { ProductFormData } from '../types/product.types'; // Pastikan path benar
+import { ProductFormData } from '../types/product.types';
 
-export const useProductForm = (onSuccess: () => void, productId?: string) => {
+// Tambahkan tenantId sebagai parameter pertama
+export const useProductForm = (tenantId: string | null, onSuccess: () => void, productId?: string) => {
   const [formData, setFormData] = useState<ProductFormData>({
-    name: '',
-    price: '',
-    purchasePrice: '',
-    stock: '',
-    barcode: '',
-    supplier: '',
-    category: '',
-    imageUrl: ''
+    name: '', price: '', purchasePrice: '', stock: '',
+    barcode: '', supplier: '', category: '', imageUrl: ''
   });
 
-  // State untuk menyimpan data asli (Original) dari database
   const [originalData, setOriginalData] = useState<any>(null);
-  
   const [loading, setLoading] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [imageUri, setImageUri] = useState<string | null>(null);
@@ -27,12 +20,9 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  // Memuat data awal saat modal edit dibuka
   const setInitialData = useCallback((data: ProductFormData, existingImageUri: string | null) => {
     setFormData(data);
     setImageUri(existingImageUri);
-    
-    // SIMPAN DATA ASLI DI SINI untuk perbandingan saat update
     setOriginalData({
       name: data.name,
       stock: parseInt(data.stock) || 0,
@@ -54,23 +44,19 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
   }, [updateField]);
 
   const pickImage = async () => {
-    try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') {
-        Alert.alert('Izin Diperlukan', 'Aplikasi memerlukan izin akses galeri.');
-        return;
-      }
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled && result.assets && result.assets[0]) {
-        setImageUri(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Izin Diperlukan', 'Aplikasi memerlukan izin akses galeri.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      setImageUri(result.assets[0].uri);
     }
   };
 
@@ -90,6 +76,11 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
 
   const handleSubmit = async () => {
     if (loading) return;
+    if (!tenantId) {
+      Alert.alert('Error', 'Sesi Toko tidak valid. Silakan login kembali.');
+      return;
+    }
+
     setLoading(true);
     try {
       let finalData = { ...formData };
@@ -102,13 +93,13 @@ export const useProductForm = (onSuccess: () => void, productId?: string) => {
       }
       
       if (productId) {
-        // PERBAIKAN: Kirim originalData (objek), bukan hanya initialStock (number)
         if (!originalData) throw new Error("Data asli tidak ditemukan.");
-        
-        await ProductService.updateProduct(productId, finalData, originalData);
+        // Kirim tenantId ke updateProduct
+        await ProductService.updateProduct(tenantId, productId, finalData, originalData);
         Alert.alert('Berhasil', 'Produk berhasil diperbarui');
       } else {
-        await ProductService.addProduct(finalData);
+        // Kirim tenantId ke addProduct
+        await ProductService.addProduct(tenantId, finalData);
         Alert.alert('Berhasil', 'Produk berhasil ditambahkan');
       }
       

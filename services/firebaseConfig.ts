@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from 'firebase/firestore'; 
 import { getAuth } from 'firebase/auth'; 
+import { getFunctions } from 'firebase/functions'; // ← Tambahkan ini
 
 const firebaseConfig = {
   apiKey: "AIzaSyAfZ63azjsqeQ2ImPUhuZACgCB1NSdmoW4",
@@ -14,6 +14,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
 export const db = getFirestore(app);
 export const auth = getAuth(app); 
-const analytics = getAnalytics(app);
+export const functions = getFunctions(app); // ← Tambahkan ini
+// Hapus getAnalytics — tidak diperlukan dan bisa error di React Native

@@ -1,136 +1,122 @@
 import { db } from './firebaseConfig';
-import { 
-  runTransaction, 
-  doc, 
-  collection, 
-  serverTimestamp,
-  increment,
-  getDocs,
-  writeBatch 
+import {
+  collection, query, where, getDocs, orderBy,
+  limit, startAfter, getCountFromServer,
+  QueryDocumentSnapshot, DocumentData,
+  doc, runTransaction, serverTimestamp,
 } from 'firebase/firestore';
+import { Transaction } from '../types/transaction.type';
 
-/**
- * 1. FUNGSI MIGRASI DATA LAMA (Jalankan sekali dari Profile)
- */
-export const migrateSoldCount = async () => {
+// ─────────────────────────────────────────────────────────
+// handleCheckoutProcess
+// ─────────────────────────────────────────────────────────
+export const handleCheckoutProcess = async (
+  cart:          any[],
+  total:         number,
+  user:          any,
+  cash:          number,
+  change:        number,
+  paymentMethod: string,
+  tenantId?:     string,
+  cashierName?:  string
+) => {
+  const resolvedTenantId = tenantId || user?.tenantId;
+  if (!resolvedTenantId) throw new Error('tenantId tidak ditemukan. Silakan login ulang.');
+
+  const transactionNumber = `TRX-${Date.now()}`;
+
   try {
-    console.log("Memulai migrasi soldCount...");
-    const transactionsSnap = await getDocs(collection(db, 'transactions'));
-    const soldMap: Record<string, number> = {};
-
-    // Hitung total dari semua transaksi lama
-    transactionsSnap.forEach(docSnap => {
-      const data = docSnap.data();
-      const items = data.items || [];
-      items.forEach((item: any) => {
-        if (item.productId) {
-          soldMap[item.productId] = (soldMap[item.productId] || 0) + (item.qty || 0);
-        }
+    await runTransaction(db, async (trx) => {
+      for (const item of cart) {
+        const productRef  = doc(db, 'tenants', resolvedTenantId, 'products', item.id);
+        const productSnap = await trx.get(productRef);
+        if (!productSnap.exists()) throw new Error(`Produk "${item.name}" tidak ditemukan!`);
+        const currentStock = productSnap.data().stock;
+        if (currentStock < item.qty) throw new Error(`Stok "${item.name}" tidak cukup (sisa: ${currentStock})`);
+        trx.update(productRef, {
+          stock:     currentStock - item.qty,
+          soldCount: (productSnap.data().soldCount || 0) + item.qty,
+        });
+      }
+      const transRef = doc(collection(db, 'tenants', resolvedTenantId, 'transactions'));
+      trx.set(transRef, {
+        transactionNumber,
+        items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, subtotal: i.price * i.qty })),
+        total,
+        cashPaid:     cash,
+        changeAmount: change,
+        paymentMethod,
+        cashierId:    user.uid,
+        cashierName:  cashierName || user.displayName || user.email || '',
+        tenantId:     resolvedTenantId,
+        date:         serverTimestamp(),
       });
     });
-
-    // Update dokumen produk menggunakan Batch
-    const batch = writeBatch(db);
-    const productsSnap = await getDocs(collection(db, 'products'));
-    
-    productsSnap.forEach(prodDoc => {
-      const totalSold = soldMap[prodDoc.id] || 0;
-      batch.update(prodDoc.ref, { soldCount: totalSold });
-    });
-
-    await batch.commit();
-    return { success: true };
-  } catch (error) {
-    console.error("Migrasi Gagal:", error);
-    throw error;
+    return { success: true, transactionNumber };
+  } catch (error: any) {
+    throw new Error(error.message || 'Gagal memproses transaksi');
   }
 };
 
-/**
- * 2. FUNGSI CHECKOUT (Update Stok & SoldCount Real-time)
- */
-// ... (import tetap sama)
+export interface PaginatedTransactions {
+  transactions: Transaction[];
+  totalCount:   number;
+  lastDoc:      QueryDocumentSnapshot<DocumentData> | null;
+  hasMore:      boolean;
+}
 
-export const handleCheckoutProcess = async (
-  cartItems: any[], 
-  total: number, 
-  user: any,
-  cashAmount: number,
-  changeAmount: number,
-  paymentMethod: 'cash' | 'qris' = 'cash'
-) => {
-  try {
-    return await runTransaction(db, async (transaction) => {
-      // 1. Validasi Stok
-      for (const item of cartItems) {
-        const productRef = doc(db, 'products', item.id);
-        const productDoc = await transaction.get(productRef);
-        if (!productDoc.exists()) throw new Error(`Produk ${item.name} tidak ditemukan!`);
-        const currentStock = productDoc.data().stock;
-        if (currentStock < item.qty) throw new Error(`Stok ${item.name} tidak cukup.`);
-      }
+export const TransactionService = {
 
-      // 2. Nomor Transaksi
-      const counterRef = doc(db, 'counters', 'transactions');
-      const counterSnap = await transaction.get(counterRef);
-      let nextNumber = (counterSnap.data()?.count || 0) + 1;
-      transaction.set(counterRef, { count: increment(1) }, { merge: true });
+  // ── HALAMAN PERTAMA ───────────────────────────────────────
+  getTransactionsFirstPage: async (
+    tenantId:  string,
+    pageSize = 20,
+    cashierId?: string   // isi jika role kasir (filter by cashier)
+  ): Promise<PaginatedTransactions> => {
+    try {
+      const col       = collection(db, 'tenants', tenantId, 'transactions');
+      const countSnap = await getCountFromServer(col);
 
-      const transactionNumber = `TRX-${new Date().getFullYear()}-${String(nextNumber).padStart(4, '0')}`;
+      const q = cashierId
+        ? query(col, where('cashierId', '==', cashierId), orderBy('date', 'desc'), limit(pageSize))
+        : query(col, orderBy('date', 'desc'), limit(pageSize));
 
-      // 3. Update Stok & SoldCount
-      cartItems.forEach((item) => {
-        const pRef = doc(db, 'products', item.id);
-        transaction.update(pRef, { 
-          stock: increment(-item.qty),
-          soldCount: increment(item.qty) 
-        });
-      });
+      const snap = await getDocs(q);
+      return {
+        transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)),
+        totalCount:   countSnap.data().count,
+        lastDoc:      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+        hasMore:      snap.docs.length === pageSize,
+      };
+    } catch (error: any) {
+      throw new Error('Gagal memuat transaksi: ' + error.message);
+    }
+  },
 
-      // 4. Simpan Transaksi
-      // 4. Simpan Transaksi
-const transactionRef = doc(collection(db, 'transactions'));
-transaction.set(transactionRef, {
-  transactionNumber,
-  // TAMBAHKAN FIELD INI AGAR MANAGEMENT SCREEN TIDAK 0
-  cashierId: user.uid, 
-  cashierEmail: user.email,
-  cashierName: user.displayName || 'Kasir',
-  total,
-  date: serverTimestamp(),
-  cashAmount,      // Tambahkan juga agar data transaksi lengkap
-  changeAmount,    // Tambahkan juga agar data transaksi lengkap
-  paymentMethod,
-  items: cartItems.map(item => ({
-    productId: item.id, // Pastikan productId disimpan di sini juga
-    productName: item.name,
-    qty: item.qty,
-    price: item.price,
-    subtotal: item.qty * item.price
-  }))
-});
+  // ── HALAMAN BERIKUTNYA ────────────────────────────────────
+  getTransactionsNextPage: async (
+    tenantId:  string,
+    lastDoc:   QueryDocumentSnapshot<DocumentData>,
+    pageSize = 20,
+    cashierId?: string
+  ): Promise<PaginatedTransactions> => {
+    try {
+      const col       = collection(db, 'tenants', tenantId, 'transactions');
+      const countSnap = await getCountFromServer(col);
 
-      // 5. Simpan Log Aktivitas (DIPERBAIKI)
-const activityRef = doc(collection(db, 'activities'));
+      const q = cashierId
+        ? query(col, where('cashierId', '==', cashierId), orderBy('date', 'desc'), startAfter(lastDoc), limit(pageSize))
+        : query(col, orderBy('date', 'desc'), startAfter(lastDoc), limit(pageSize));
 
-const productDetails = cartItems.map(item => 
-  `${item.qty} unit "${item.name}" seharga Rp ${item.price.toLocaleString('id-ID')}`
-).join(', ');
-
-const message = `Penjualan ${transactionNumber}: ${productDetails}. Total Rp ${total.toLocaleString('id-ID')}`;
-
-transaction.set(activityRef, {
-  type: 'KELUAR',
-  message: message,
-  userName: user.displayName || 'Kasir',
-  userId: user.uid,           // <--- TAMBAHKAN INI (ID User yang sedang login)
-  createdAt: serverTimestamp(), // <--- SUDAH BENAR (Pastikan terkirim ke Firestore)
-});
-
-      return { success: true, transactionNumber };
-    });
-  } catch (e) {
-    console.error(e);
-    throw e;
-  }
+      const snap = await getDocs(q);
+      return {
+        transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)),
+        totalCount:   countSnap.data().count,
+        lastDoc:      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+        hasMore:      snap.docs.length === pageSize,
+      };
+    } catch (error: any) {
+      throw new Error('Gagal memuat halaman berikutnya: ' + error.message);
+    }
+  },
 };

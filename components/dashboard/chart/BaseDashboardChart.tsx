@@ -3,16 +3,15 @@ import {
   View,
   Text,
   StyleSheet,
-  Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { LineChart } from 'react-native-chart-kit';
 import { TrendingUp, Calendar } from 'lucide-react-native';
 
 import { COLORS } from '../../../constants/colors';
 import { BaseCard } from '../../ui/BaseCard';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export interface BaseChartProps {
   data?: { value: number; label?: string }[];
@@ -31,6 +30,19 @@ export const BaseDashboardChart: React.FC<BaseChartProps> = ({
   accentColor = COLORS.primary,
   dateRangeLabel,
 }) => {
+  // ✅ FIX: Gunakan useWindowDimensions untuk responsif di web
+  const { width: windowWidth } = useWindowDimensions();
+  
+  // ✅ Hitung lebar chart yang responsif
+  const getChartWidth = () => {
+    if (Platform.OS === 'web') {
+      // Di web, ambil 90% dari container (dengan max width)
+      return Math.min(windowWidth * 0.5, 800); // Max 800px untuk chart
+    }
+    // Di mobile, pakai lebar layar dikurangi padding
+    return windowWidth - 80;
+  };
+
   const getDefaultLabels = () => {
     switch (selectedPreset) {
       case 'today':
@@ -123,7 +135,7 @@ export const BaseDashboardChart: React.FC<BaseChartProps> = ({
                 labels,
                 datasets: [{ data: values }],
               }}
-              width={SCREEN_WIDTH - 80}
+              width={getChartWidth()}
               height={200}
               chartConfig={chartConfig}
               bezier
