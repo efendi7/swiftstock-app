@@ -1,62 +1,31 @@
-import { db } from './firebaseConfig';
+/**
+ * transactionService.ts
+ *
+ * Semua operasi transaksi POS:
+ *   - Checkout (dengan atau tanpa member)
+ *   - Pagination transaksi (admin lihat semua / kasir filter by cashier)
+ *
+ * Prinsip: SRP · DRY · tidak ada dynamic import · typed
+ *
+ * Sebelumnya ada 2 fungsi checkout yang 80% duplikat.
+ * Sekarang: 1 fungsi `handleCheckout` dengan parameter opsional member.
+ */
+
 import {
   collection, query, where, getDocs, orderBy,
   limit, startAfter, getCountFromServer,
   QueryDocumentSnapshot, DocumentData,
   doc, runTransaction, serverTimestamp,
+  WriteBatch, QuerySnapshot,
 } from 'firebase/firestore';
+import { db } from './firebaseConfig';
 import { Transaction } from '../types/transaction.type';
+import { TransactionMember } from '../types/member.types';
+import { MemberService } from './memberService';
 
 // ─────────────────────────────────────────────────────────
-// handleCheckoutProcess
+// Types
 // ─────────────────────────────────────────────────────────
-export const handleCheckoutProcess = async (
-  cart:          any[],
-  total:         number,
-  user:          any,
-  cash:          number,
-  change:        number,
-  paymentMethod: string,
-  tenantId?:     string,
-  cashierName?:  string
-) => {
-  const resolvedTenantId = tenantId || user?.tenantId;
-  if (!resolvedTenantId) throw new Error('tenantId tidak ditemukan. Silakan login ulang.');
-
-  const transactionNumber = `TRX-${Date.now()}`;
-
-  try {
-    await runTransaction(db, async (trx) => {
-      for (const item of cart) {
-        const productRef  = doc(db, 'tenants', resolvedTenantId, 'products', item.id);
-        const productSnap = await trx.get(productRef);
-        if (!productSnap.exists()) throw new Error(`Produk "${item.name}" tidak ditemukan!`);
-        const currentStock = productSnap.data().stock;
-        if (currentStock < item.qty) throw new Error(`Stok "${item.name}" tidak cukup (sisa: ${currentStock})`);
-        trx.update(productRef, {
-          stock:     currentStock - item.qty,
-          soldCount: (productSnap.data().soldCount || 0) + item.qty,
-        });
-      }
-      const transRef = doc(collection(db, 'tenants', resolvedTenantId, 'transactions'));
-      trx.set(transRef, {
-        transactionNumber,
-        items: cart.map(i => ({ id: i.id, name: i.name, price: i.price, qty: i.qty, subtotal: i.price * i.qty })),
-        total,
-        cashPaid:     cash,
-        changeAmount: change,
-        paymentMethod,
-        cashierId:    user.uid,
-        cashierName:  cashierName || user.displayName || user.email || '',
-        tenantId:     resolvedTenantId,
-        date:         serverTimestamp(),
-      });
-    });
-    return { success: true, transactionNumber };
-  } catch (error: any) {
-    throw new Error(error.message || 'Gagal memproses transaksi');
-  }
-};
 
 export interface PaginatedTransactions {
   transactions: Transaction[];
@@ -65,58 +34,246 @@ export interface PaginatedTransactions {
   hasMore:      boolean;
 }
 
+export interface CartItem {
+  id:       string;
+  name:     string;
+  price:    number;
+  qty:      number;
+}
+
+export interface CheckoutParams {
+  cart:           CartItem[];
+  subtotal:       number;      // Total sebelum diskon member
+  user:           any;
+  cash:           number;
+  change:         number;
+  paymentMethod:  string;
+  tenantId:       string;
+  cashierName?:   string;
+  /** Isi jika ada member aktif. null = walk-in */
+  member?:        (TransactionMember & { finalTotal: number }) | null;
+}
+
+export interface CheckoutResult {
+  success:         boolean;
+  transactionNumber: string;
+  transactionId:   string;
+  total:           number;
+}
+
+// ─────────────────────────────────────────────────────────
+// Private helpers
+// ─────────────────────────────────────────────────────────
+
+/** Serialize cart item untuk disimpan ke Firestore */
+const serializeCartItems = (cart: CartItem[]) =>
+  cart.map(item => ({
+    id:       item.id,
+    name:     item.name,
+    price:    item.price,
+    qty:      item.qty,
+    subtotal: item.price * item.qty,
+  }));
+
+/** Bangun object member untuk disimpan ke transaksi, atau {} jika walk-in */
+const buildMemberPayload = (member: CheckoutParams['member']): Record<string, any> => {
+  if (!member) return {};
+  return {
+    member: {
+      memberId:        member.memberId,
+      memberName:      member.memberName,
+      memberPhone:     member.memberPhone,
+      tierName:        member.tierName,
+      discountPercent: member.discountPercent,
+      discountAmount:  member.discountAmount,
+      pointsEarned:    member.pointsEarned,
+      pointsRedeemed:  member.pointsRedeemed,
+      redeemAmount:    member.redeemAmount,
+    },
+  };
+};
+
+/** Hitung total akhir dari parameter checkout */
+const resolveTotal = (params: CheckoutParams): number =>
+  params.member ? params.member.finalTotal : params.subtotal;
+
+/** Bangun query transaksi dengan/tanpa filter cashier */
+const buildTransactionQuery = (
+  col:       ReturnType<typeof collection>,
+  pageSize:  number,
+  cashierId?: string,
+  afterDoc?:  QueryDocumentSnapshot<DocumentData>,
+) => {
+  const constraints = [
+    ...(cashierId ? [where('cashierId', '==', cashierId)] : []),
+    orderBy('date', 'desc'),
+    ...(afterDoc ? [startAfter(afterDoc)] : []),
+    limit(pageSize),
+  ];
+  return query(col, ...constraints);
+};
+
+/** Bangun PaginatedTransactions dari snapshot */
+const buildPaginatedResult = (
+  snap:       QuerySnapshot<DocumentData>,
+  totalCount: number,
+  pageSize:   number,
+): PaginatedTransactions => ({
+  transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)),
+  totalCount,
+  lastDoc:      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
+  hasMore:      snap.docs.length === pageSize,
+});
+
+// ─────────────────────────────────────────────────────────
+// Checkout — fungsi utama (menggantikan 2 fungsi lama)
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Proses checkout: validasi stok, update stok, simpan transaksi.
+ * Jika `params.member` diisi, diskon & poin member ikut disimpan.
+ * Semua operasi Firestore berjalan dalam satu atomic transaction.
+ */
+export const handleCheckout = async (params: CheckoutParams): Promise<CheckoutResult> => {
+  const { cart, subtotal, user, cash, change, paymentMethod, tenantId, cashierName, member } = params;
+
+  if (!tenantId) throw new Error('tenantId tidak ditemukan. Silakan login ulang.');
+
+  const total             = resolveTotal(params);
+  const transactionNumber = `TRX-${Date.now()}`;
+  let   transactionId     = '';
+
+  await runTransaction(db, async (trx) => {
+    // 1. Baca semua dokumen produk dulu (Firestore rules: read before write)
+    const productRefs  = cart.map(item => doc(db, 'tenants', tenantId, 'products', item.id));
+    const productSnaps = await Promise.all(productRefs.map(ref => trx.get(ref)));
+
+    // 2. Validasi stok sebelum menulis
+    for (let i = 0; i < cart.length; i++) {
+      const snap = productSnaps[i];
+      if (!snap.exists()) throw new Error(`Produk "${cart[i].name}" tidak ditemukan!`);
+      const currentStock = snap.data().stock;
+      if (currentStock < cart[i].qty)
+        throw new Error(`Stok "${cart[i].name}" tidak cukup (sisa: ${currentStock})`);
+    }
+
+    // 3. Update stok & soldCount tiap produk
+    for (let i = 0; i < cart.length; i++) {
+      const data = productSnaps[i].data()!;
+      trx.update(productRefs[i], {
+        stock:     data.stock - cart[i].qty,
+        soldCount: (data.soldCount || 0) + cart[i].qty,
+      });
+    }
+
+    // 4. Simpan transaksi
+    const transRef  = doc(collection(db, 'tenants', tenantId, 'transactions'));
+    transactionId   = transRef.id;
+
+    trx.set(transRef, {
+      transactionNumber,
+      items:         serializeCartItems(cart),
+      subtotal,
+      total,
+      cashPaid:      cash,
+      cashAmount:    cash,
+      changeAmount:  change,
+      paymentMethod,
+      cashierId:     user.uid,
+      cashierName:   cashierName || user.displayName || '',
+      tenantId,
+      date:          serverTimestamp(),
+      ...buildMemberPayload(member),
+    });
+  });
+
+  // 5. Update poin member di luar transaction (non-blocking, tidak batalkan checkout jika gagal)
+  if (member) {
+    MemberService.processCheckoutMember(
+      tenantId,
+      member.memberId,
+      total,
+      member.pointsEarned,
+      member.pointsRedeemed,
+    ).catch(e => console.error('[MemberService] Update poin gagal:', e));
+  }
+
+  return { success: true, transactionNumber, transactionId, total };
+};
+
+/**
+ * @deprecated Gunakan `handleCheckout` — fungsi ini hanya alias untuk backward-compat
+ */
+export const handleCheckoutProcess = (
+  cart: any[], total: number, user: any,
+  cash: number, change: number, paymentMethod: string,
+  tenantId?: string, cashierName?: string,
+) => handleCheckout({
+  cart, subtotal: total, user, cash, change,
+  paymentMethod, tenantId: tenantId || user?.tenantId || '',
+  cashierName,
+});
+
+/**
+ * @deprecated Gunakan `handleCheckout` dengan `member` param
+ */
+export const handleCheckoutProcessWithMember = (
+  cart: any[], subtotal: number, user: any,
+  cash: number, change: number, paymentMethod: string,
+  tenantId: string, cashierName?: string,
+  memberData?: (TransactionMember & { finalTotal: number }) | null,
+  overrideTotal?: number,
+) => handleCheckout({
+  cart, subtotal, user, cash, change,
+  paymentMethod, tenantId, cashierName,
+  member: memberData
+    ? { ...memberData, finalTotal: overrideTotal ?? memberData.finalTotal }
+    : null,
+});
+
+// ─────────────────────────────────────────────────────────
+// TransactionService — pagination
+// ─────────────────────────────────────────────────────────
+
 export const TransactionService = {
 
-  // ── HALAMAN PERTAMA ───────────────────────────────────────
-  getTransactionsFirstPage: async (
-    tenantId:  string,
-    pageSize = 20,
-    cashierId?: string   // isi jika role kasir (filter by cashier)
-  ): Promise<PaginatedTransactions> => {
+  /**
+   * Ambil halaman pertama transaksi.
+   * @param cashierId  Isi untuk filter transaksi milik kasir tertentu (role kasir).
+   */
+  async getTransactionsFirstPage(
+    tenantId:   string,
+    pageSize  = 20,
+    cashierId?: string,
+  ): Promise<PaginatedTransactions> {
     try {
-      const col       = collection(db, 'tenants', tenantId, 'transactions');
-      const countSnap = await getCountFromServer(col);
-
-      const q = cashierId
-        ? query(col, where('cashierId', '==', cashierId), orderBy('date', 'desc'), limit(pageSize))
-        : query(col, orderBy('date', 'desc'), limit(pageSize));
-
-      const snap = await getDocs(q);
-      return {
-        transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)),
-        totalCount:   countSnap.data().count,
-        lastDoc:      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
-        hasMore:      snap.docs.length === pageSize,
-      };
-    } catch (error: any) {
-      throw new Error('Gagal memuat transaksi: ' + error.message);
+      const col = collection(db, 'tenants', tenantId, 'transactions');
+      const [countSnap, snap] = await Promise.all([
+        getCountFromServer(col),
+        getDocs(buildTransactionQuery(col, pageSize, cashierId)),
+      ]);
+      return buildPaginatedResult(snap, countSnap.data().count, pageSize);
+    } catch (e: any) {
+      throw new Error('Gagal memuat transaksi: ' + e.message);
     }
   },
 
-  // ── HALAMAN BERIKUTNYA ────────────────────────────────────
-  getTransactionsNextPage: async (
+  /** Ambil halaman berikutnya (cursor-based pagination) */
+  async getTransactionsNextPage(
     tenantId:  string,
     lastDoc:   QueryDocumentSnapshot<DocumentData>,
     pageSize = 20,
-    cashierId?: string
-  ): Promise<PaginatedTransactions> => {
+    cashierId?: string,
+  ): Promise<PaginatedTransactions> {
     try {
-      const col       = collection(db, 'tenants', tenantId, 'transactions');
-      const countSnap = await getCountFromServer(col);
-
-      const q = cashierId
-        ? query(col, where('cashierId', '==', cashierId), orderBy('date', 'desc'), startAfter(lastDoc), limit(pageSize))
-        : query(col, orderBy('date', 'desc'), startAfter(lastDoc), limit(pageSize));
-
-      const snap = await getDocs(q);
-      return {
-        transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)),
-        totalCount:   countSnap.data().count,
-        lastDoc:      snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null,
-        hasMore:      snap.docs.length === pageSize,
-      };
-    } catch (error: any) {
-      throw new Error('Gagal memuat halaman berikutnya: ' + error.message);
+      const col = collection(db, 'tenants', tenantId, 'transactions');
+      const [countSnap, snap] = await Promise.all([
+        getCountFromServer(col),
+        getDocs(buildTransactionQuery(col, pageSize, cashierId, lastDoc)),
+      ]);
+      return buildPaginatedResult(snap, countSnap.data().count, pageSize);
+    } catch (e: any) {
+      throw new Error('Gagal memuat halaman berikutnya: ' + e.message);
     }
   },
 };

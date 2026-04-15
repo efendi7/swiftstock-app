@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "icon": "./assets/swiftstock.png", 
+    "icon": "./assets/swiftstock.png",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",

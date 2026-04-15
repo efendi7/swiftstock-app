@@ -1,9 +1,6 @@
 /**
- * CashierManagementWeb.tsx
- * Server-side pagination via CashierService (Firestore cursor).
- * Filter tetap client-side dari data halaman aktif.
+ * CashierManagementWeb.tsx — wire CashierDetailModal
  */
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
@@ -12,17 +9,16 @@ import {
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { Users, Plus, UserCheck, UserX, Clock } from 'lucide-react-native';
 
+import { useNavigation } from '@react-navigation/native';
 import { COLORS }  from '@constants/colors';
 import { useAuth } from '@hooks/auth/useAuth';
-import {
-  CashierService, Cashier, ShiftType,
-  PaginatedCashiers,
-} from '@services/cashierService';
+import { CashierService, Cashier, ShiftType, PaginatedCashiers } from '@services/cashierService';
 
-import CashierFilterWeb  from '@components/cashier-management/CashierFilterWeb';
-import CashierListWeb    from '@components/cashier-management/CashierListWeb';
-import { AddCashierModal } from './modal/AddCashierModal';
-import { EditShiftModal }  from './modal/EditShiftModal';
+import CashierFilterWeb        from '@components/cashier-management/CashierFilterWeb';
+import CashierListWeb          from '@components/cashier-management/CashierListWeb';
+import { AddCashierModal }     from './modal/AddCashierModal';
+import { EditShiftModal }      from './modal/EditShiftModal';
+import { CashierDetailModal }  from './modal/CashierDetailModal';
 
 type ShiftFilter  = 'all' | ShiftType | 'unassigned';
 type StatusFilter = 'all' | 'active' | 'inactive';
@@ -31,6 +27,7 @@ const PAGE_SIZE = 20;
 
 const CashierManagementWeb = () => {
   const { tenantId, user, loading: authLoading } = useAuth();
+  const navigation = useNavigation<any>();
 
   const [cashiers,         setCashiers]         = useState<Cashier[]>([]);
   const [filteredCashiers, setFilteredCashiers] = useState<Cashier[]>([]);
@@ -49,6 +46,7 @@ const CashierManagementWeb = () => {
 
   const [showAddModal,    setShowAddModal]    = useState(false);
   const [showShiftModal,  setShowShiftModal]  = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedCashier, setSelectedCashier] = useState<Cashier | null>(null);
 
   const [searchQuery,  setSearchQuery]  = useState('');
@@ -57,14 +55,12 @@ const CashierManagementWeb = () => {
 
   const hasActiveFilter = searchQuery !== '' || shiftFilter !== 'all' || statusFilter !== 'all';
 
-  // ── LOAD HALAMAN PERTAMA ────────────────────────────────
   const loadFirstPage = useCallback(async () => {
     if (!tenantId) { setLoading(false); return; }
     try {
       setLoading(true);
       setCurrentPage(1);
       setPageCache({});
-
       const result: PaginatedCashiers = await CashierService.getCashiersFirstPage(tenantId, PAGE_SIZE);
       setCashiers(result.cashiers);
       setFilteredCashiers(result.cashiers);
@@ -72,17 +68,12 @@ const CashierManagementWeb = () => {
       setTotalPages(Math.ceil(result.totalCount / PAGE_SIZE));
       setLastDoc(result.lastDoc);
       setPageCache({ 1: { data: result.cashiers, lastDoc: result.lastDoc } });
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
   }, [tenantId]);
 
-  // ── GANTI HALAMAN ───────────────────────────────────────
   const handlePageChange = useCallback(async (page: number) => {
     if (!tenantId) return;
-
     if (pageCache[page]) {
       const cached = pageCache[page];
       setCashiers(cached.data);
@@ -91,25 +82,18 @@ const CashierManagementWeb = () => {
       setCurrentPage(page);
       return;
     }
-
     const prevCache = pageCache[page - 1];
     if (!prevCache?.lastDoc) return;
-
     try {
       setPageLoading(true);
-      const result: PaginatedCashiers = await CashierService.getCashiersNextPage(
-        tenantId, prevCache.lastDoc, PAGE_SIZE
-      );
+      const result: PaginatedCashiers = await CashierService.getCashiersNextPage(tenantId, prevCache.lastDoc, PAGE_SIZE);
       setCashiers(result.cashiers);
       setFilteredCashiers(result.cashiers);
       setLastDoc(result.lastDoc);
       setCurrentPage(page);
       setPageCache(prev => ({ ...prev, [page]: { data: result.cashiers, lastDoc: result.lastDoc } }));
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setPageLoading(false);
-    }
+    } catch (e) { console.error(e); }
+    finally { setPageLoading(false); }
   }, [tenantId, pageCache]);
 
   const handleRefresh = useCallback(async () => {
@@ -130,7 +114,15 @@ const CashierManagementWeb = () => {
     } catch (e) { console.error(e); }
   };
 
-  // Stat chips
+  const handleViewHistory = (cashier: Cashier) => {
+    setShowDetailModal(false);
+    setSelectedCashier(null);
+    navigation.navigate('AttendanceHistory', {
+      cashierId:   cashier.id,
+      cashierName: cashier.displayName,
+    });
+  };
+
   const activeCount   = cashiers.filter(c => c.status === 'active').length;
   const inactiveCount = cashiers.filter(c => c.status === 'inactive').length;
   const todayDay      = new Date().getDay();
@@ -189,6 +181,7 @@ const CashierManagementWeb = () => {
                 isAdmin={user?.role === 'admin'}
                 onEditShift={(cashier) => { setSelectedCashier(cashier); setShowShiftModal(true); }}
                 onToggleStatus={handleToggleStatus}
+                onViewDetail={(cashier) => { setSelectedCashier(cashier); setShowDetailModal(true); }}
                 usePagination={!hasActiveFilter}
                 currentPage={currentPage}
                 totalPages={totalPages}
@@ -214,6 +207,13 @@ const CashierManagementWeb = () => {
         tenantId={tenantId || ''}
         onClose={() => { setShowShiftModal(false); setSelectedCashier(null); }}
         onSuccess={loadFirstPage}
+      />
+      <CashierDetailModal
+        visible={showDetailModal}
+        cashier={selectedCashier}
+        tenantId={tenantId || ''}
+        onClose={() => { setShowDetailModal(false); setSelectedCashier(null); }}
+        onViewHistory={handleViewHistory}
       />
     </View>
   );

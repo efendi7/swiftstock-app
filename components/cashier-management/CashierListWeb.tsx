@@ -1,14 +1,12 @@
 /**
- * CashierListWeb.tsx
- * Tabel kasir dengan server-side pagination support.
+ * CashierListWeb.tsx — tabel kasir + pagination + tombol Detail
  */
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import {
   Users, ChevronLeft, ChevronRight, RotateCcw,
   Clock, Sun, Sunset, Moon, CalendarDays,
-  CheckCircle2, XCircle, ShieldOff, ShieldCheck,
+  CheckCircle2, XCircle, ShieldOff, ShieldCheck, Eye,
 } from 'lucide-react-native';
 import { COLORS } from '../../constants/colors';
 import { Cashier, ShiftType, DAY_LABELS } from '../../services/cashierService';
@@ -20,6 +18,7 @@ interface Props {
   isAdmin:        boolean;
   onEditShift:    (cashier: Cashier) => void;
   onToggleStatus: (cashier: Cashier) => void;
+  onViewDetail:   (cashier: Cashier) => void;   // ← baru
   usePagination?: boolean;
   currentPage?:   number;
   totalPages?:    number;
@@ -32,7 +31,7 @@ const PAGE_SIZE_DEFAULT = 20;
 
 const CashierListWeb = ({
   data, refreshing, onRefresh, isAdmin,
-  onEditShift, onToggleStatus,
+  onEditShift, onToggleStatus, onViewDetail,
   usePagination = false,
   currentPage: serverPage = 1,
   totalPages:  serverTotalPages = 1,
@@ -50,10 +49,9 @@ const CashierListWeb = ({
   const pgTotal    = usePagination ? serverTotalPages : Math.ceil(data.length / pageSize);
   const sliceStart = usePagination ? 0               : (localPage - 1) * pageSize;
   const rows       = usePagination ? data             : data.slice(sliceStart, sliceStart + pageSize);
-
-  const dispFrom  = usePagination ? (serverPage - 1) * pageSize + 1 : sliceStart + 1;
-  const dispTotal = usePagination ? (totalCount ?? data.length)     : data.length;
-  const dispTo    = Math.min(dispFrom + rows.length - 1, dispTotal);
+  const dispFrom   = usePagination ? (serverPage - 1) * pageSize + 1 : sliceStart + 1;
+  const dispTotal  = usePagination ? (totalCount ?? data.length)     : data.length;
+  const dispTo     = Math.min(dispFrom + rows.length - 1, dispTotal);
 
   const goTo = (page: number) => {
     if (usePagination) onPageChange?.(page);
@@ -71,7 +69,6 @@ const CashierListWeb = ({
 
   return (
     <View style={styles.container}>
-
       {/* TABLE HEADER */}
       <View style={styles.tableHead}>
         <Text style={[styles.th, styles.cNo]}>#</Text>
@@ -80,7 +77,7 @@ const CashierListWeb = ({
         <Text style={[styles.th, styles.cShift, { textAlign: 'center' }]}>Shift</Text>
         <Text style={[styles.th, styles.cDays]}>Hari Aktif</Text>
         <Text style={[styles.th, styles.cStatus, { textAlign: 'center' }]}>Status</Text>
-        {isAdmin && <Text style={[styles.th, styles.cAction, { textAlign: 'center' }]}>Aksi</Text>}
+        <Text style={[styles.th, styles.cAction, { textAlign: 'center' }]}>Aksi</Text>
       </View>
 
       {/* ROWS */}
@@ -93,18 +90,16 @@ const CashierListWeb = ({
           isAdmin={isAdmin}
           onEditShift={onEditShift}
           onToggleStatus={onToggleStatus}
+          onViewDetail={onViewDetail}
         />
       ))}
 
       {/* FOOTER */}
       <View style={styles.footer}>
         <Text style={styles.footerInfo}>
-          <Text style={styles.bold}>{dispFrom}–{dispTo}</Text>
-          {' dari '}
-          <Text style={styles.bold}>{dispTotal}</Text>
-          {' kasir'}
+          <Text style={styles.bold}>{dispFrom}–{dispTo}</Text>{' dari '}
+          <Text style={styles.bold}>{dispTotal}</Text>{' kasir'}
         </Text>
-
         {pgTotal > 1 && (
           <View style={styles.pagination}>
             <PageBtn onPress={() => goTo(pg - 1)} disabled={pg === 1}>
@@ -120,7 +115,6 @@ const CashierListWeb = ({
             </PageBtn>
           </View>
         )}
-
         <TouchableOpacity style={styles.refreshBtn} onPress={onRefresh}>
           <RotateCcw size={13} color="#475569" />
           <Text style={styles.refreshTxt}>Perbarui</Text>
@@ -131,10 +125,11 @@ const CashierListWeb = ({
 };
 
 // ── ROW ──────────────────────────────────────────────────
-const Row = ({ cashier: c, rowNumber, isEven, isAdmin, onEditShift, onToggleStatus }: {
+const Row = ({ cashier: c, rowNumber, isEven, isAdmin, onEditShift, onToggleStatus, onViewDetail }: {
   cashier: Cashier; rowNumber: number; isEven: boolean; isAdmin: boolean;
-  onEditShift: (c: Cashier) => void;
+  onEditShift:    (c: Cashier) => void;
   onToggleStatus: (c: Cashier) => void;
+  onViewDetail:   (c: Cashier) => void;
 }) => {
   const isActive = c.status === 'active';
   return (
@@ -175,30 +170,37 @@ const Row = ({ cashier: c, rowNumber, isEven, isAdmin, onEditShift, onToggleStat
           </Text>
         </View>
       </View>
-      {isAdmin && (
-        <View style={[styles.cell, styles.cAction, { gap: 6, justifyContent: 'center' }]}>
-          <TouchableOpacity style={styles.editBtn} onPress={() => onEditShift(c)}>
-            <Clock size={12} color={COLORS.primary} />
-            <Text style={styles.editBtnText}>Shift</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.toggleBtn, isActive ? styles.toggleBtnOff : styles.toggleBtnOn]}
-            onPress={() => onToggleStatus(c)}
-          >
-            {isActive ? <ShieldOff size={12} color="#EF4444" /> : <ShieldCheck size={12} color="#10B981" />}
-          </TouchableOpacity>
-        </View>
-      )}
+      <View style={[styles.cell, styles.cAction, { gap: 5, justifyContent: 'center' }]}>
+        {/* Detail — selalu tampil */}
+        <TouchableOpacity style={styles.detailBtn} onPress={() => onViewDetail(c)}>
+          <Eye size={12} color={COLORS.secondary} />
+          <Text style={styles.detailBtnText}>Detail</Text>
+        </TouchableOpacity>
+        {isAdmin && (
+          <>
+            <TouchableOpacity style={styles.editBtn} onPress={() => onEditShift(c)}>
+              <Clock size={12} color={COLORS.primary} />
+              <Text style={styles.editBtnText}>Shift</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.toggleBtn, isActive ? styles.toggleBtnOff : styles.toggleBtnOn]}
+              onPress={() => onToggleStatus(c)}
+            >
+              {isActive ? <ShieldOff size={12} color="#EF4444" /> : <ShieldCheck size={12} color="#10B981" />}
+            </TouchableOpacity>
+          </>
+        )}
+      </View>
     </View>
   );
 };
 
 // ── SHIFT BADGE ───────────────────────────────────────────
 const SHIFT_CONFIG: Record<ShiftType, { label: string; bg: string; color: string; Icon: any }> = {
-  pagi:  { label: 'Pagi',  bg: '#FEF3C7', color: '#D97706', Icon: Sun         },
-  siang: { label: 'Siang', bg: '#FFF7ED', color: '#EA580C', Icon: Sunset      },
-  malam: { label: 'Malam', bg: '#EFF6FF', color: '#3B82F6', Icon: Moon        },
-  full:  { label: 'Full',  bg: '#F0FDF4', color: '#10B981', Icon: CalendarDays},
+  pagi:  { label: 'Pagi',  bg: '#FEF3C7', color: '#D97706', Icon: Sun          },
+  siang: { label: 'Siang', bg: '#FFF7ED', color: '#EA580C', Icon: Sunset       },
+  malam: { label: 'Malam', bg: '#EFF6FF', color: '#3B82F6', Icon: Moon         },
+  full:  { label: 'Full',  bg: '#F0FDF4', color: '#10B981', Icon: CalendarDays },
 };
 
 const ShiftBadge = ({ shift }: { shift: ShiftType | null }) => {
@@ -221,8 +223,7 @@ const PageBtn = ({ children, onPress, disabled, active }: {
 }) => (
   <TouchableOpacity
     style={[styles.pageBtn, active && styles.pageBtnActive, disabled && styles.pageBtnDisabled]}
-    onPress={onPress}
-    disabled={disabled}
+    onPress={onPress} disabled={disabled}
   >
     {children}
   </TouchableOpacity>
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
   cShift:  { flex: 1.2 },
   cDays:   { flex: 2, flexDirection: 'row', flexWrap: 'wrap' as any, gap: 3 },
   cStatus: { flex: 1.2 },
-  cAction: { flex: 1.5 },
+  cAction: { flex: 2 },  // lebih lebar untuk 3 tombol
 
   row:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 12, borderRadius: 8, marginBottom: 3, borderWidth: 1, borderColor: '#F1F5F9' },
   rowAlt: { backgroundColor: '#FAFBFC' },
@@ -274,11 +275,13 @@ const styles = StyleSheet.create({
   statusInactive: { backgroundColor: '#FEF2F2' },
   statusText:     { fontSize: 11, fontFamily: 'PoppinsBold' },
 
-  editBtn:      { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(28,58,90,0.07)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6, cursor: 'pointer' as any },
-  editBtnText:  { fontSize: 11, fontFamily: 'PoppinsSemiBold', color: COLORS.primary },
-  toggleBtn:    { width: 30, height: 30, borderRadius: 7, alignItems: 'center', justifyContent: 'center', cursor: 'pointer' as any },
-  toggleBtnOff: { backgroundColor: '#FEF2F2' },
-  toggleBtnOn:  { backgroundColor: '#F0FDF4' },
+  detailBtn:     { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: COLORS.secondary + '14', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, cursor: 'pointer' as any },
+  detailBtnText: { fontSize: 11, fontFamily: 'PoppinsSemiBold', color: COLORS.secondary },
+  editBtn:       { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(28,58,90,0.07)', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 5, cursor: 'pointer' as any },
+  editBtnText:   { fontSize: 11, fontFamily: 'PoppinsSemiBold', color: COLORS.primary },
+  toggleBtn:     { width: 28, height: 28, borderRadius: 7, alignItems: 'center', justifyContent: 'center', cursor: 'pointer' as any },
+  toggleBtnOff:  { backgroundColor: '#FEF2F2' },
+  toggleBtnOn:   { backgroundColor: '#F0FDF4' },
 
   footer:     { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: '#E2E8F0', flexWrap: 'wrap' as any, gap: 10 },
   footerInfo: { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#64748B' },

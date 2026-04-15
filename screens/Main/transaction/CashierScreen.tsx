@@ -1,425 +1,267 @@
+/**
+ * CashierScreen.tsx — render only
+ * Logic di useCashier, modal pembayaran di PaymentModal.
+ */
+
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList, TextInput,
-  Alert, ActivityIndicator, SafeAreaView, StatusBar, Modal, Image
+  Modal, SafeAreaView, StatusBar, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { auth, db } from '../../../services/firebaseConfig';
-import { handleCheckoutProcess } from '../../../services/transactionService';
 import {
-  Scan, Trash2, Plus, Minus, CreditCard, PackageOpen, Lightbulb, X, Banknote, QrCode
+  Scan, Trash2, Plus, Minus, CreditCard, PackageOpen,
+  Lightbulb, X, Crown, UserPlus, BadgeCheck, Clock, Ban, ChevronRight,
 } from 'lucide-react-native';
-import { COLORS } from '../../../constants/colors';
-import { ScreenHeader } from '../../../components/common/ScreenHeader';
-import { RoundedContentScreen } from '../../../components/common/RoundedContentScreen';
-import BarcodeScannerScreen from './BarcodeScannerScreen';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-
-// ✅ Gunakan useAuth untuk dapat tenantId yang benar (berlaku untuk admin & kasir)
-import { useAuth } from '../../../hooks/auth/useAuth';
-
-interface Product {
-  id: string;
-  name: string;
-  barcode: string;
-  price: number;
-  stock: number;
-}
-
-interface CartItem extends Product {
-  qty: number;
-}
-
-type PaymentMethod = 'cash' | 'qris';
+import { COLORS } from '@constants/colors';
+import { ScreenHeader }       from '@components/common/ScreenHeader';
+import { RoundedContentScreen } from '@components/common/RoundedContentScreen';
+import BarcodeScannerScreen   from './BarcodeScannerScreen';
+import { PaymentModal }       from '@components/cashier/PaymentModal';
+import { useCashier }         from '@hooks/useCashier';
 
 const CashierScreen = () => {
-  // ✅ FIX UTAMA: tenantId dari useAuth, bukan dari user.uid
-  // - Untuk admin: tenantId = ID tenant toko mereka
-  // - Untuk kasir: tenantId = ID tenant toko tempat mereka bekerja
-  const { tenantId, user } = useAuth();
-
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [showScanner, setShowScanner] = useState(false);
-  const [loading, setLoading] = useState(false);
   const insets = useSafeAreaInsets();
-
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
-  const [cashAmount, setCashAmount] = useState('');
-  const [changeAmount, setChangeAmount] = useState(0);
-
-  const calculateTotal = () => cart.reduce((sum, i) => sum + i.price * i.qty, 0);
-
-  const getProductByBarcode = async (barcode: string) => {
-    try {
-      setLoading(true);
-
-      // ✅ Gunakan tenantId dari useAuth — benar untuk semua role
-      if (!tenantId) {
-        Alert.alert('Error', 'Sesi tidak valid. Silakan login ulang.');
-        return;
-      }
-
-      const productRef = collection(db, 'tenants', tenantId, 'products');
-      const q = query(productRef, where('barcode', '==', barcode.trim()));
-      const snapshot = await getDocs(q);
-
-      if (snapshot.empty) {
-        Alert.alert('Produk Tidak Ada', `Barcode ${barcode} tidak terdaftar di toko ini.`);
-        return;
-      }
-
-      const docSnap = snapshot.docs[0];
-      const product = { id: docSnap.id, ...docSnap.data() } as Product;
-      addToCart(product);
-
-    } catch (e: any) {
-      console.error('Scan Error:', e);
-      Alert.alert('Error', 'Gagal mencari produk. Periksa koneksi internet.');
-    } finally {
-      setLoading(false);
-      setShowScanner(false);
-    }
-  };
-
-  const addToCart = (product: Product) => {
-    const exist = cart.find(i => i.id === product.id);
-    if (exist) {
-      if (exist.qty + 1 > product.stock) {
-        Alert.alert('Stok Terbatas', `Sisa stok: ${product.stock}`);
-        return;
-      }
-      setCart(cart.map(i => i.id === product.id ? { ...i, qty: i.qty + 1 } : i));
-    } else {
-      if (product.stock < 1) {
-        Alert.alert('Stok Habis', 'Produk ini tidak tersedia.');
-        return;
-      }
-      setCart([...cart, { ...product, qty: 1 }]);
-    }
-  };
-
-  const updateQty = (id: string, qty: number) => {
-    const item = cart.find(i => i.id === id);
-    if (!item) return;
-    if (qty > item.qty && qty > item.stock) {
-      Alert.alert('Stok Tidak Cukup', `Maksimal: ${item.stock}`);
-      return;
-    }
-    if (qty < 1) {
-      Alert.alert('Hapus Item?', 'Hapus produk ini dari keranjang?', [
-        { text: 'Batal', style: 'cancel' },
-        { text: 'Hapus', style: 'destructive', onPress: () => setCart(cart.filter(i => i.id !== id)) }
-      ]);
-      return;
-    }
-    setCart(cart.map(i => i.id === id ? { ...i, qty } : i));
-  };
-
-  const handleCashChange = (text: string) => {
-    const amount = parseInt(text.replace(/[^0-9]/g, '')) || 0;
-    setCashAmount(text);
-    setChangeAmount(amount - calculateTotal());
-  };
-
-  const onCheckout = async () => {
-    const firebaseUser = auth.currentUser;
-    if (!firebaseUser || !tenantId) return;
-
-    try {
-      setLoading(true);
-
-      const rawCash    = parseInt(cashAmount.replace(/[^0-9]/g, '')) || 0;
-      const finalCash  = paymentMethod === 'qris' ? calculateTotal() : rawCash;
-      const finalChange = paymentMethod === 'qris' ? 0 : changeAmount;
-
-      const result = await handleCheckoutProcess(
-        cart,
-        calculateTotal(),
-        firebaseUser,
-        finalCash,
-        finalChange,
-        paymentMethod,
-        tenantId,          // ✅ pass tenantId dari useAuth
-        user?.displayName  // ✅ pass nama kasir
-      );
-
-      Alert.alert('Sukses', `Transaksi ${result.transactionNumber} berhasil!`, [
-        {
-          text: 'Selesai', onPress: () => {
-            setCart([]);
-            setShowPaymentModal(false);
-            setCashAmount('');
-            setChangeAmount(0);
-            setPaymentMethod('cash');
-          }
-        }
-      ]);
-    } catch (e: any) {
-      Alert.alert('Gagal', e.message || 'Terjadi kesalahan transaksi');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const c      = useCashier();
+  const [showScanner, setShowScanner] = useState(false);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={s.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
       <ScreenHeader title="Kasir Digital" subtitle="Scan barcode untuk mulai transaksi" />
 
       <RoundedContentScreen>
-        <View style={styles.mainActionRow}>
-          <TouchableOpacity style={styles.scanButton} onPress={() => setShowScanner(true)}>
+        {/* Scan */}
+        <View style={s.actionRow}>
+          <TouchableOpacity style={s.scanBtn} onPress={() => setShowScanner(true)}>
             <Scan size={24} color="#FFF" />
-            <Text style={styles.scanButtonText}>Scan Produk</Text>
+            <Text style={s.scanBtnText}>Scan Produk</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.infoBar}>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Jenis Produk</Text>
-            <Text style={styles.infoValue}>{cart.length}</Text>
-          </View>
-          <View style={styles.infoItem}>
-            <Text style={styles.infoLabel}>Total Qty</Text>
-            <Text style={styles.infoValue}>{cart.reduce((t, i) => t + i.qty, 0)}</Text>
-          </View>
+        {/* Info bar */}
+        <View style={s.infoBar}>
+          <InfoItem label="Jenis Produk" value={String(c.cart.length)} />
+          <InfoItem label="Total Qty"    value={String(c.cart.reduce((t: number, i) => t + i.qty, 0))} />
         </View>
 
+        {/* Cart */}
         <FlatList
-          data={cart}
+          data={c.cart}
           keyExtractor={i => i.id}
-          contentContainerStyle={[styles.listContent, { paddingBottom: cart.length > 0 ? 300 : 100 }]}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: c.cart.length > 0 ? 300 : 100 }}
           renderItem={({ item }) => (
-            <View style={styles.cartCard}>
-              <View style={styles.itemInfo}>
-                <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                <Text style={styles.itemPrice}>Rp {item.price.toLocaleString('id-ID')}</Text>
+            <View style={s.cartCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.itemName} numberOfLines={1}>{item.name}</Text>
+                <Text style={s.itemPrice}>Rp {item.price.toLocaleString('id-ID')}</Text>
               </View>
-              <View style={styles.qtyContainer}>
-                <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.qty - 1)}>
+              <View style={s.qtyRow}>
+                <TouchableOpacity style={s.qtyBtn} onPress={() => c.updateQty(item.id, item.qty - 1)}>
                   {item.qty === 1 ? <Trash2 size={16} color={COLORS.danger} /> : <Minus size={16} color={COLORS.primary} />}
                 </TouchableOpacity>
-                <Text style={styles.qtyText}>{item.qty}</Text>
-                <TouchableOpacity style={styles.qtyBtn} onPress={() => updateQty(item.id, item.qty + 1)}>
+                <Text style={s.qtyText}>{item.qty}</Text>
+                <TouchableOpacity style={s.qtyBtn} onPress={() => c.updateQty(item.id, item.qty + 1)}>
                   <Plus size={16} color={COLORS.primary} />
                 </TouchableOpacity>
               </View>
             </View>
           )}
           ListEmptyComponent={
-            <View style={styles.emptyContainer}>
+            <View style={s.empty}>
               <PackageOpen size={64} color="#CBD5E1" />
-              <Text style={styles.emptyText}>Keranjang masih kosong</Text>
+              <Text style={s.emptyText}>Keranjang masih kosong</Text>
             </View>
           }
         />
 
-        {cart.length > 0 && (
-          <View style={[styles.summaryContainer, { paddingBottom: Math.max(insets.bottom, 20) }]}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total Pembayaran</Text>
-              <Text style={styles.totalAmount}>Rp {calculateTotal().toLocaleString('id-ID')}</Text>
+        {/* Summary */}
+        {c.cart.length > 0 && (
+          <View style={[s.summary, { paddingBottom: Math.max(insets.bottom, 20) }]}>
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Total Pembayaran</Text>
+              <Text style={s.totalAmount}>Rp {c.subtotal.toLocaleString('id-ID')}</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.checkoutButton, loading && styles.disabledBtn]}
-              onPress={() => setShowPaymentModal(true)}
-              disabled={loading}
-            >
-              <View style={styles.btnContent}>
-                <CreditCard size={20} color="#FFF" />
-                <Text style={styles.checkoutText}>Bayar Sekarang</Text>
-              </View>
+            <TouchableOpacity style={[s.checkoutBtn, c.loading && s.disabled]} onPress={() => c.setShowPaymentModal(true)} disabled={c.loading}>
+              <CreditCard size={20} color="#FFF" />
+              <Text style={s.checkoutText}>Bayar Sekarang</Text>
             </TouchableOpacity>
-
-            <View style={styles.tipContainer}>
-              <View style={styles.tipHeader}>
-                <Lightbulb size={16} color={COLORS.secondary} />
-                <Text style={styles.tipTitle}>Tips Kasir</Text>
-              </View>
-              <Text style={styles.tipText}>
-                Pastikan jumlah barang sesuai dengan fisik sebelum menekan bayar.
-              </Text>
+            <View style={s.tip}>
+              <Lightbulb size={16} color={COLORS.secondary} />
+              <Text style={s.tipText}>Pastikan jumlah barang sesuai fisik sebelum menekan bayar.</Text>
             </View>
           </View>
         )}
       </RoundedContentScreen>
 
-      {/* PAYMENT MODAL */}
-      <Modal
-        visible={showPaymentModal}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paymentModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Metode Pembayaran</Text>
-              <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.modalBody}>
-              <View style={styles.methodSelector}>
-                <TouchableOpacity
-                  style={[styles.methodBtn, paymentMethod === 'cash' && styles.methodBtnActive]}
-                  onPress={() => setPaymentMethod('cash')}
-                >
-                  <Banknote size={20} color={paymentMethod === 'cash' ? '#FFF' : '#64748B'} />
-                  <Text style={[styles.methodText, paymentMethod === 'cash' && styles.methodTextActive]}>Tunai</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.methodBtn, paymentMethod === 'qris' && styles.methodBtnActive]}
-                  onPress={() => setPaymentMethod('qris')}
-                >
-                  <QrCode size={20} color={paymentMethod === 'qris' ? '#FFF' : '#64748B'} />
-                  <Text style={[styles.methodText, paymentMethod === 'qris' && styles.methodTextActive]}>QRIS</Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.label}>Total Tagihan</Text>
-              <Text style={styles.bigTotal}>Rp {calculateTotal().toLocaleString('id-ID')}</Text>
-
-              {paymentMethod === 'cash' ? (
-                <>
-                  <View style={styles.inputSection}>
-                    <Text style={styles.label}>Uang Diterima (Cash)</Text>
-                    <View style={styles.inputContainer}>
-                      <Text style={styles.currencyPrefix}>Rp</Text>
-                      <TextInput
-                        style={styles.cashInput}
-                        keyboardType="numeric"
-                        placeholder="0"
-                        value={cashAmount}
-                        onChangeText={handleCashChange}
-                        autoFocus
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.changeSection}>
-                    <Text style={styles.label}>Kembalian</Text>
-                    <Text style={[styles.changeValue, changeAmount < 0 && { color: COLORS.danger }]}>
-                      Rp {changeAmount.toLocaleString('id-ID')}
-                    </Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.qrisContainer}>
-                  <Image
-                    source={require('../../../assets/images/qris.png')}
-                    style={styles.qrisImage}
-                    resizeMode="contain"
-                  />
-                  <Text style={styles.qrisHint}>Pelanggan silakan scan kode di atas</Text>
-                </View>
-              )}
-
-              <TouchableOpacity
-                style={[
-                  styles.confirmButton,
-                  paymentMethod === 'cash' && (changeAmount < 0 || !cashAmount) && styles.disabledBtn
-                ]}
-                onPress={onCheckout}
-                disabled={loading || (paymentMethod === 'cash' && (changeAmount < 0 || !cashAmount))}
-              >
-                {loading
-                  ? <ActivityIndicator color="#FFF" />
-                  : <Text style={styles.confirmButtonText}>Konfirmasi Pembayaran</Text>
-                }
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <BarcodeScannerScreen
-        visible={showScanner}
-        onClose={() => setShowScanner(false)}
-        onScan={getProductByBarcode}
+      {/* Payment modal */}
+      <PaymentModal
+        visible={c.showPaymentModal}    onClose={() => c.setShowPaymentModal(false)}
+        subtotal={c.subtotal}           finalTotal={c.finalTotal}
+        paymentMethod={c.paymentMethod} setPaymentMethod={c.setPaymentMethod}
+        cashAmount={c.cashAmount}       changeAmount={c.changeAmount}
+        onCashChange={c.handleCashChange}
+        onCheckout={c.onCheckout}       loading={c.loading}
+        canConfirm={c.canConfirm}       memberBlocking={c.memberBlocking}
+        showMemberInput={c.showMemberInput}
+        memberState={c.memberState}     memberLoading={c.memberLoading}
+        memberError={c.memberError}     pendingNewMember={c.pendingNewMember}
+        onSelectMember={c.handleSelectMember}
+        onScanMember={() => c.setShowMemberScanner(true)}
+        onRemoveMember={c.handleRemoveMember}
+        onToggleRedeem={c.handleToggleRedeem}
+        getTierColor={c.getTierColor}
+        redeemRate={c.memberSettings.redeemRate}
+        checkRedeemEligibility={c.checkRedeemEligibility}
       />
+
+      {/* Modal pendaftaran member bersyarat */}
+      <RegFeeModal
+        visible={c.regFeePrompt}
+        phone={c.phoneInput}
+        fee={c.registrationFee}
+        onSelectProspect={() => { c.handleCancelRegFee(); c.setShowNamePrompt(true); }}
+        onSelectFull={() => { c.handleCancelRegFee(); c.setPendingPayFee(true); c.setShowNamePrompt(true); }}
+        onCancel={c.handleCancelRegFee}
+      />
+
+      {/* Modal nama member baru */}
+      <NamePromptModal
+        visible={c.showNamePrompt}
+        phone={c.phoneInput}
+        name={c.pendingMemberName}
+        nameError={c.nameInputError}
+        onChangeName={(v: string) => { c.setPendingMemberName(v); c.setNameInputError(''); }}
+        onConfirm={c.handleConfirmName}
+        onCancel={() => c.setShowNamePrompt(false)}
+      />
+
+      <BarcodeScannerScreen visible={showScanner}         onClose={() => setShowScanner(false)}         onScan={c.getProductByBarcode} />
+      <BarcodeScannerScreen visible={c.showMemberScanner} onClose={() => c.setShowMemberScanner(false)} onScan={c.handleMemberQRScanned} />
     </SafeAreaView>
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: COLORS.primary },
-  mainActionRow: { paddingHorizontal: 20, paddingTop: 10, marginBottom: 15 },
-  scanButton: {
-    backgroundColor: COLORS.secondary,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    padding: 16, borderRadius: 15, elevation: 4,
-    shadowColor: COLORS.secondary, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 5,
-  },
-  scanButtonText: { color: '#FFF', fontSize: 16, fontFamily: 'PoppinsBold', marginLeft: 10 },
-  listContent: { paddingHorizontal: 20 },
-  cartCard: {
-    backgroundColor: '#FFF', borderRadius: 16, padding: 15,
-    flexDirection: 'row', alignItems: 'center', marginBottom: 12,
-    borderWidth: 1, borderColor: '#F1F5F9', elevation: 2,
-  },
-  itemInfo: { flex: 1 },
-  itemName: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B' },
-  itemPrice: { fontSize: 13, color: COLORS.primary, fontFamily: 'PoppinsSemiBold' },
-  qtyContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 10, padding: 4 },
-  qtyBtn: { padding: 8, backgroundColor: '#FFF', borderRadius: 8, elevation: 1 },
-  qtyText: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B', marginHorizontal: 15, minWidth: 20, textAlign: 'center' },
-  emptyContainer: { alignItems: 'center', marginTop: 60 },
-  emptyText: { marginTop: 10, color: '#94A3B8', fontFamily: 'PoppinsMedium', fontSize: 16 },
-  infoBar: {
-    flexDirection: 'row', justifyContent: 'space-around',
-    backgroundColor: '#F1F5F9', marginHorizontal: 20,
-    padding: 10, borderRadius: 12, marginBottom: 10,
-  },
-  infoItem: { alignItems: 'center' },
-  infoLabel: { fontSize: 10, color: '#64748B', fontFamily: 'PoppinsRegular' },
-  infoValue: { fontSize: 14, color: COLORS.primary, fontFamily: 'PoppinsBold' },
-  summaryContainer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    backgroundColor: '#FFF', padding: 20,
-    borderTopLeftRadius: 32, borderTopRightRadius: 32,
-    elevation: 25, shadowColor: '#000',
-    shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.1, shadowRadius: 10,
-  },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  totalLabel: { fontSize: 14, color: '#64748B', fontFamily: 'PoppinsMedium' },
+// ── Inline sub-components (kecil, tidak perlu file terpisah) ──
+
+const InfoItem = ({ label, value }: { label: string; value: string }) => (
+  <View style={{ alignItems: 'center' }}>
+    <Text style={{ fontSize: 10, color: '#64748B', fontFamily: 'PoppinsRegular' }}>{label}</Text>
+    <Text style={{ fontSize: 14, color: COLORS.primary, fontFamily: 'PoppinsBold' }}>{value}</Text>
+  </View>
+);
+
+const RegFeeModal = ({ visible, phone, fee, onSelectProspect, onSelectFull, onCancel }: any) => (
+  <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <View style={s.overlay}>
+      <View style={s.modal}>
+        <View style={s.modalIcon}><UserPlus size={28} color={COLORS.primary} /></View>
+        <Text style={s.modalTitle}>Daftarkan Member Baru?</Text>
+        <Text style={s.modalPhone}>{phone}</Text>
+        <Text style={s.modalDesc}>Nomor ini belum terdaftar. Pilih cara pendaftaran:</Text>
+
+        <TouchableOpacity style={s.optionCard} onPress={onSelectProspect}>
+          <View style={[s.optionIcon, { backgroundColor: '#FFF7ED' }]}><Clock size={18} color="#F59E0B" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.optionTitle}>Calon Member</Text>
+            <Text style={s.optionDesc}>Gratis. Belum dapat poin & diskon. Upgrade otomatis saat syarat terpenuhi.</Text>
+          </View>
+          <ChevronRight size={16} color="#94A3B8" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[s.optionCard, s.optionCardPremium]} onPress={onSelectFull}>
+          <View style={[s.optionIcon, { backgroundColor: '#EFF6FF' }]}><BadgeCheck size={18} color={COLORS.primary} /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={[s.optionTitle, { color: COLORS.primary }]}>Langsung Member Penuh</Text>
+            <Text style={s.optionDesc}>Bayar Rp {fee.toLocaleString('id-ID')}. Langsung dapat poin & diskon.</Text>
+          </View>
+          <ChevronRight size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, marginTop: 4 }} onPress={onCancel}>
+          <Ban size={14} color="#94A3B8" />
+          <Text style={{ fontSize: 12, fontFamily: 'PoppinsMedium', color: '#94A3B8' }}>Batal, tidak daftarkan member</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  </Modal>
+);
+
+const NamePromptModal = ({ visible, phone, name, nameError, onChangeName, onConfirm, onCancel }: any) => (
+  <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
+    <View style={s.overlay}>
+      <View style={s.modal}>
+        <View style={[s.modalIcon, { backgroundColor: 'rgba(16,185,129,0.1)' }]}>
+          <Crown size={28} color="#10B981" />
+        </View>
+        <Text style={s.modalTitle}>Nama Member Baru</Text>
+        <Text style={s.modalPhone}>{phone}</Text>
+        <View style={{ width: '100%', marginVertical: 12 }}>
+          <TextInput
+            style={[s.nameInput, nameError && s.nameInputErr]}
+            placeholder="Masukkan nama lengkap..." placeholderTextColor="#CBD5E1"
+            value={name} onChangeText={onChangeName}
+            autoFocus returnKeyType="done" onSubmitEditing={onConfirm}
+          />
+          {!!nameError && <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 4 }}>{nameError}</Text>}
+        </View>
+        <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginBottom: 20, fontFamily: 'PoppinsRegular' }}>
+          Email bisa dilengkapi nanti via halaman Member.
+        </Text>
+        <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+          <TouchableOpacity style={s.cancelBtn} onPress={onCancel}>
+            <Text style={{ fontSize: 14, fontFamily: 'PoppinsSemiBold', color: '#64748B' }}>Batal</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={s.confirmBtn} onPress={onConfirm}>
+            <Text style={{ fontSize: 14, fontFamily: 'PoppinsBold', color: '#FFF' }}>Daftar Sekarang</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  </Modal>
+);
+
+// ── Styles ────────────────────────────────────────────────
+
+const s = StyleSheet.create({
+  safeArea:    { flex: 1, backgroundColor: COLORS.primary },
+  actionRow:   { paddingHorizontal: 20, paddingTop: 10, marginBottom: 15 },
+  scanBtn:     { backgroundColor: COLORS.secondary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 16, borderRadius: 15, elevation: 4 },
+  scanBtnText: { color: '#FFF', fontSize: 16, fontFamily: 'PoppinsBold', marginLeft: 10 },
+  infoBar:     { flexDirection: 'row', justifyContent: 'space-around', backgroundColor: '#F1F5F9', marginHorizontal: 20, padding: 10, borderRadius: 12, marginBottom: 10 },
+  cartCard:    { backgroundColor: '#FFF', borderRadius: 16, padding: 15, flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderWidth: 1, borderColor: '#F1F5F9', elevation: 2 },
+  itemName:    { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B' },
+  itemPrice:   { fontSize: 13, color: COLORS.primary, fontFamily: 'PoppinsSemiBold' },
+  qtyRow:      { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 10, padding: 4 },
+  qtyBtn:      { padding: 8, backgroundColor: '#FFF', borderRadius: 8, elevation: 1 },
+  qtyText:     { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B', marginHorizontal: 15, minWidth: 20, textAlign: 'center' },
+  empty:       { alignItems: 'center', marginTop: 60 },
+  emptyText:   { marginTop: 10, color: '#94A3B8', fontFamily: 'PoppinsMedium', fontSize: 16 },
+  summary:     { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#FFF', padding: 20, borderTopLeftRadius: 32, borderTopRightRadius: 32, elevation: 25 },
+  totalRow:    { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  totalLabel:  { fontSize: 14, color: '#64748B', fontFamily: 'PoppinsMedium' },
   totalAmount: { fontSize: 20, color: COLORS.secondary, fontFamily: 'PoppinsBold' },
-  checkoutButton: { backgroundColor: COLORS.primary, padding: 18, borderRadius: 16 },
-  btnContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  disabledBtn: { backgroundColor: '#CBD5E1' },
-  checkoutText: { color: '#FFF', fontSize: 16, fontFamily: 'PoppinsBold' },
-  tipContainer: {
-    marginTop: 16, backgroundColor: '#F0FDF4', padding: 12,
-    borderRadius: 14, borderWidth: 1, borderColor: '#DCFCE7',
-  },
-  tipHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-  tipTitle: { fontSize: 11, fontFamily: 'PoppinsBold', color: COLORS.secondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  tipText: { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#15803D', lineHeight: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', padding: 20 },
-  paymentModalContent: { backgroundColor: '#FFF', borderRadius: 24, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  modalTitle: { fontSize: 18, fontFamily: 'PoppinsBold', color: '#1E293B' },
-  modalBody: { padding: 24 },
-  methodSelector: { flexDirection: 'row', gap: 12, marginBottom: 20 },
-  methodBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0' },
-  methodBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  methodText: { fontSize: 14, fontFamily: 'PoppinsSemiBold', color: '#64748B' },
-  methodTextActive: { color: '#FFF' },
-  label: { fontSize: 12, color: '#64748B', fontFamily: 'PoppinsMedium', marginBottom: 4 },
-  bigTotal: { fontSize: 28, fontFamily: 'PoppinsBold', color: COLORS.primary, marginBottom: 20 },
-  inputSection: { marginBottom: 20 },
-  inputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', paddingHorizontal: 15 },
-  currencyPrefix: { fontSize: 18, fontFamily: 'PoppinsBold', color: '#1E293B', marginRight: 5 },
-  cashInput: { flex: 1, height: 56, fontSize: 20, fontFamily: 'PoppinsBold', color: '#1E293B' },
-  changeSection: { backgroundColor: '#F0F9FF', padding: 15, borderRadius: 12, marginBottom: 24 },
-  changeValue: { fontSize: 22, fontFamily: 'PoppinsBold', color: COLORS.secondary },
-  qrisContainer: { alignItems: 'center', marginBottom: 24, padding: 10, backgroundColor: '#F8FAFC', borderRadius: 16 },
-  qrisImage: { width: 200, height: 200 },
-  qrisHint: { marginTop: 10, fontSize: 12, fontFamily: 'PoppinsMedium', color: '#64748B' },
-  confirmButton: { backgroundColor: COLORS.secondary, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  confirmButtonText: { color: '#FFF', fontSize: 16, fontFamily: 'PoppinsBold' },
+  checkoutBtn: { backgroundColor: COLORS.primary, padding: 18, borderRadius: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
+  checkoutText:{ color: '#FFF', fontSize: 16, fontFamily: 'PoppinsBold' },
+  disabled:    { backgroundColor: '#CBD5E1' },
+  tip:         { marginTop: 16, backgroundColor: '#F0FDF4', padding: 12, borderRadius: 14, borderWidth: 1, borderColor: '#DCFCE7', flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  tipText:     { flex: 1, fontSize: 11, fontFamily: 'PoppinsRegular', color: '#15803D', lineHeight: 16 },
+
+  overlay:     { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modal:       { backgroundColor: '#FFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 340, alignItems: 'center' },
+  modalIcon:   { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(28,58,90,0.08)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  modalTitle:  { fontSize: 18, fontFamily: 'PoppinsBold', color: '#1E293B', marginBottom: 4 },
+  modalPhone:  { fontSize: 14, fontFamily: 'PoppinsSemiBold', color: COLORS.primary, marginBottom: 12 },
+  modalDesc:   { fontSize: 13, fontFamily: 'PoppinsRegular', color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 16 },
+  optionCard:       { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', padding: 14, marginBottom: 10, width: '100%' },
+  optionCardPremium:{ backgroundColor: '#EFF6FF', borderColor: '#BFDBFE' },
+  optionIcon:  { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  optionTitle: { fontSize: 13, fontFamily: 'PoppinsBold', color: '#1E293B', marginBottom: 3 },
+  optionDesc:  { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#64748B', lineHeight: 16 },
+  nameInput:   { backgroundColor: '#F8FAFC', borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0', paddingHorizontal: 16, height: 48, fontSize: 15, fontFamily: 'PoppinsRegular', color: '#1E293B', width: '100%' },
+  nameInputErr:{ borderColor: '#EF4444' },
+  cancelBtn:   { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0', alignItems: 'center' },
+  confirmBtn:  { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center' },
 });
 
 export default CashierScreen;

@@ -1,264 +1,170 @@
 import React from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  useWindowDimensions,
-  Platform,
-} from 'react-native';
-import { LineChart } from 'react-native-chart-kit';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 import { TrendingUp, Calendar } from 'lucide-react-native';
-
-import { COLORS } from '../../../constants/colors';
-import { BaseCard } from '../../ui/BaseCard';
+import { COLORS } from '@constants/colors';
 
 export interface BaseChartProps {
-  data?: { value: number; label?: string }[];
-  isLoading?: boolean;
-  selectedPreset: 'today' | 'week' | 'month' | 'year';
-  title?: string;
-  accentColor?: string;
+  data?:           { value: number; label?: string }[];
+  isLoading?:      boolean;
+  selectedPreset:  'today' | 'week' | 'month' | 'year';
+  title?:          string;
+  accentColor?:    string;
   dateRangeLabel?: string;
+  chartWidth?:     number; // dari onLayout parent
 }
 
+const fmtRp = (n: number) => {
+  if (n >= 1_000_000_000) return `Rp ${(n/1_000_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000)     return `Rp ${(n/1_000_000).toFixed(1)}jt`;
+  if (n >= 1_000)         return `Rp ${(n/1_000).toFixed(0)}rb`;
+  return `Rp ${n.toLocaleString('id-ID')}`;
+};
+
 export const BaseDashboardChart: React.FC<BaseChartProps> = ({
-  data,
-  isLoading = false,
-  selectedPreset,
-  title = 'Tren Penjualan',
-  accentColor = COLORS.primary,
-  dateRangeLabel,
+  data, isLoading = false, selectedPreset,
+  title = 'Analitik Penjualan Toko',
+  accentColor = COLORS.secondary,
+  dateRangeLabel, chartWidth = 360,
 }) => {
-  // ✅ FIX: Gunakan useWindowDimensions untuk responsif di web
-  const { width: windowWidth } = useWindowDimensions();
-  
-  // ✅ Hitung lebar chart yang responsif
-  const getChartWidth = () => {
-    if (Platform.OS === 'web') {
-      // Di web, ambil 90% dari container (dengan max width)
-      return Math.min(windowWidth * 0.5, 800); // Max 800px untuk chart
-    }
-    // Di mobile, pakai lebar layar dikurangi padding
-    return windowWidth - 80;
-  };
+  const rawData = data && data.length > 0 ? data : [];
+  const hasData = rawData.some(d => d.value > 0);
+  const total   = rawData.reduce((s, d) => s + d.value, 0);
 
-  const getDefaultLabels = () => {
-    switch (selectedPreset) {
-      case 'today':
-        return ['06', '12', '18', '00'];
-      case 'week':
-        return ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-      case 'month':
-        return ['Mg1', 'Mg2', 'Mg3', 'Mg4'];
-      case 'year':
-        return ['1', '4', '7', '10'];
-      default:
-        return [];
-    }
-  };
+  // Padding atas: maxValue 20% di atas titik tertinggi agar tidak terpotong
+  const maxRaw    = Math.max(...rawData.map(d => d.value), 1);
+  const maxValue  = Math.ceil(maxRaw * 1.25);
 
-  const getXAxisLabelHint = () => {
-    switch (selectedPreset) {
-      case 'today':
-        return 'Pukul (Jam)';
-      case 'week':
-        return 'Hari';
-      case 'month':
-        return 'Minggu ke-';
-      case 'year':
-        return 'Bulan';
-      default:
-        return '';
-    }
-  };
-
-  const chartData =
-    data && data.length > 0 ? data : [{ value: 0 }, { value: 0 }];
-
-  const values = chartData.map(d => d.value);
-  const labels =
-    data && data.length > 0
-      ? data.map(d => d.label ?? '')
-      : getDefaultLabels();
-
-  const totalValue = values.reduce((sum, v) => sum + v, 0);
-  const hasValidData = totalValue > 0;
-
-  const chartConfig = {
-    backgroundColor: '#FFF',
-    backgroundGradientFrom: '#FFF',
-    backgroundGradientTo: '#FFF',
-    decimalPlaces: 0,
-    color: () => accentColor,
-    labelColor: () => COLORS.textLight,
-    propsForDots: {
-      r: '4',
-      strokeWidth: '2',
-      stroke: '#FFF',
-    },
-    propsForBackgroundLines: {
-      strokeDasharray: '0',
-      stroke: '#F0F0F0',
-    },
-  };
+  const chartData = rawData.map(d => ({
+    value: d.value,
+    label: d.label ?? '',
+    labelTextStyle: { color: '#94A3B8', fontSize: 9, fontFamily: 'PoppinsRegular' },
+  }));
 
   return (
-    <BaseCard variant="ultraSoft" style={styles.card}>
-      {/* ---------- HEADER ---------- */}
-      <View style={styles.header}>
-        <View
-          style={[
-            styles.iconBox,
-            { backgroundColor: `${accentColor}15` },
-          ]}
-        >
-          <TrendingUp size={18} color={accentColor} />
-        </View>
+    <View style={styles.container}>
 
-        <View style={styles.titleContainer}>
+      {/* HEADER */}
+      <View style={styles.header}>
+        <View style={[styles.iconBox, { backgroundColor: accentColor + '18' }]}>
+          <TrendingUp size={15} color={accentColor} />
+        </View>
+        <View style={styles.headerText}>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>
-            Total: Rp {totalValue.toLocaleString('id-ID')}
+          <Text style={[styles.subtitle, { color: accentColor }]}>
+            Total: {fmtRp(total)}
           </Text>
         </View>
       </View>
 
-      {/* ---------- CHART ---------- */}
-      <View style={styles.chartWrapper}>
-        <View style={styles.chartContainer}>
-          {isLoading ? (
-            <ActivityIndicator size="large" color={accentColor} />
-          ) : hasValidData ? (
-            <LineChart
-              data={{
-                labels,
-                datasets: [{ data: values }],
-              }}
-              width={getChartWidth()}
-              height={200}
-              chartConfig={chartConfig}
-              bezier
-              style={styles.chartStyle}
-              withVerticalLines
-              withHorizontalLines
-              withInnerLines
-              withOuterLines={false}
-              yAxisLabel="Rp "
-              formatYLabel={val => {
-                const num = parseInt(val);
-                if (num >= 1_000_000)
-                  return (num / 1_000_000).toFixed(1) + 'jt';
-                if (num >= 1_000) return num / 1_000 + 'rb';
-                return val;
-              }}
-            />
-          ) : (
-            <View style={styles.emptyChart}>
-              <Text style={styles.emptyChartText}>
-                Belum ada data transaksi
-              </Text>
-            </View>
-          )}
-
-          {getXAxisLabelHint() !== '' && (
-            <View style={styles.xAxisHintWrapper}>
-              <Text style={styles.xAxisHintText}>
-                {getXAxisLabelHint()}
-              </Text>
-            </View>
-          )}
-        </View>
+      {/* CHART */}
+      <View style={styles.chartArea}>
+        {isLoading ? (
+          <ActivityIndicator size="large" color={accentColor} />
+        ) : !hasData ? (
+          <View style={styles.empty}>
+            <TrendingUp size={32} color="#E2E8F0" strokeWidth={1.5} />
+            <Text style={styles.emptyText}>Belum ada data transaksi</Text>
+          </View>
+        ) : (
+          <LineChart
+            data={chartData}
+            width={chartWidth - 40}
+            height={190}
+            maxValue={maxValue}
+            initialSpacing={12}
+            endSpacing={12}
+            yAxisLabelWidth={38}
+            color={accentColor}
+            thickness={2.5}
+            curved
+            areaChart
+            startFillColor={accentColor}
+            endFillColor="#fff"
+            startOpacity={0.18}
+            endOpacity={0.01}
+            hideDataPoints={false}
+            dataPointsColor={accentColor}
+            dataPointsRadius={4}
+            yAxisTextStyle={{ color: '#94A3B8', fontSize: 10, fontFamily: 'PoppinsRegular' }}
+            xAxisLabelTextStyle={{ color: '#94A3B8', fontSize: 9, fontFamily: 'PoppinsRegular' }}
+            yAxisColor="transparent"
+            xAxisColor="#F1F5F9"
+            rulesColor="#F1F5F9"
+            rulesType="solid"
+            noOfSections={4}
+            yAxisTextNumberOfLines={1}
+            formatYLabel={(v) => {
+              const n = Number(v);
+              if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}jt`;
+              if (n >= 1_000)     return `${(n/1_000).toFixed(0)}rb`;
+              return String(n);
+            }}
+            pointerConfig={{
+              pointerStripHeight: 170,
+              pointerStripColor: '#CBD5E1',
+              pointerStripWidth: 1,
+              pointerColor: accentColor,
+              radius: 6,
+              pointerLabelWidth: 100,
+              pointerLabelHeight: 36,
+              activatePointersOnLongPress: false,
+              autoAdjustPointerLabelPosition: false,
+              shiftPointerLabelX: -50,
+              shiftPointerLabelY: -80,
+              pointerLabelComponent: (items: any[]) => (
+                <View style={[styles.tooltip, { borderColor: accentColor + '40' }]}>
+                  <Text style={[styles.tooltipVal, { color: accentColor }]}>
+                    {fmtRp(items[0]?.value ?? 0)}
+                  </Text>
+                </View>
+              ),
+            }}
+          />
+        )}
       </View>
 
-      {/* ---------- FOOTER ---------- */}
+      {/* FOOTER */}
       {dateRangeLabel && (
         <View style={styles.footer}>
-          <Calendar size={12} color={COLORS.textLight} />
+          <Calendar size={11} color="#94A3B8" />
           <Text style={styles.footerText}>{dateRangeLabel}</Text>
         </View>
       )}
-    </BaseCard>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    paddingTop: 20,
-    marginVertical: 10,
+  container: { flex: 1 },
+
+  header:     { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16, gap: 10 },
+  iconBox:    { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  headerText: { flex: 1 },
+  title:      { fontSize: 13, fontFamily: 'PoppinsSemiBold', color: '#1E293B' },
+  subtitle:   { fontSize: 11, fontFamily: 'PoppinsRegular', marginTop: 2 },
+
+  chartArea: {
+    borderRadius: 10, overflow: 'hidden',
+    marginBottom: 10, justifyContent: 'center', alignItems: 'flex-start',
+    backgroundColor: '#FAFCFF', paddingTop: 8,
   },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 10,
-  },
-  iconBox: {
-    padding: 8,
-    borderRadius: 12,
-    marginRight: 12,
-  },
-  titleContainer: { flex: 1 },
-  title: {
-    fontSize: 15,
-    fontFamily: 'PoppinsSemiBold',
-    color: COLORS.textDark,
-  },
-  subtitle: {
-    fontSize: 12,
-    fontFamily: 'PoppinsRegular',
-    color: COLORS.textLight,
-  },
+  empty:     { alignItems: 'center', gap: 8, paddingVertical: 40, width: '100%' },
+  emptyText: { fontSize: 13, fontFamily: 'PoppinsMedium', color: '#94A3B8' },
 
-  chartWrapper: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  tooltip: {
+    backgroundColor: '#FFF', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, elevation: 3,
+    shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
   },
-  chartContainer: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(248,248,248,0.35)',
-    borderRadius: 12,
-    paddingVertical: 10,
-  },
-  chartStyle: {
-    marginVertical: 8,
-    borderRadius: 16,
-  },
-
-  emptyChart: {
-    height: 180,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyChartText: {
-    fontFamily: 'PoppinsMedium',
-    color: COLORS.textLight,
-  },
+  tooltipVal: { fontSize: 12, fontFamily: 'PoppinsBold' },
 
   footer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderColor: '#F3F3F3',
-    justifyContent: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    justifyContent: 'center', paddingTop: 10,
+    borderTopWidth: 1, borderTopColor: '#F1F5F9',
   },
-  footerText: {
-    fontSize: 11,
-    fontFamily: 'PoppinsMedium',
-    color: COLORS.textLight,
-  },
-
-  xAxisHintWrapper: {
-    marginTop: 6,
-    alignItems: 'center',
-  },
-  xAxisHintText: {
-    fontSize: 11,
-    fontFamily: 'PoppinsMedium',
-    color: COLORS.textLight,
-  },
+  footerText: { fontSize: 10, fontFamily: 'PoppinsMedium', color: '#94A3B8' },
 });

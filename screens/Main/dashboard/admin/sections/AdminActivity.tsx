@@ -6,7 +6,7 @@ interface AdminActivityProps {
   activities: Activity[];
   currentUserName: string;
   onSeeMore?: () => void;
-  tenantId: string; // ✅ TAMBAH: diteruskan ke BaseRecentActivity
+  tenantId: string; 
 }
 
 export const AdminActivity: React.FC<AdminActivityProps> = ({
@@ -22,7 +22,8 @@ export const AdminActivity: React.FC<AdminActivityProps> = ({
       userRole="admin"
       title="Aktivitas Terbaru"
       onSeeMore={onSeeMore}
-      tenantId={tenantId} // ✅ Teruskan ke BaseRecentActivity
+      tenantId={tenantId}
+      containerStyle="flat"
     />
   );
 };

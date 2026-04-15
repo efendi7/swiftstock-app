@@ -1,22 +1,49 @@
-import React, { useCallback, useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
   ActivityIndicator, Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
-import { COLORS } from '@constants/colors';
-import { auth } from '@services/firebaseConfig';
-import { useDashboard } from '@hooks/useDashboard';
-import { useAuth } from '@hooks/auth/useAuth';
+import { COLORS }           from '@constants/colors';
+import { auth }             from '@services/firebaseConfig';
+import { useDashboard }     from '@hooks/useDashboard';
+import { useAuth }          from '@hooks/auth/useAuth';
+import { SettingsService }  from '@services/settingsService';
+import { DashboardService } from '@services/dashboardService';
+import { PeriodCompareData } from '@components/dashboard/chart/PeriodCompareCard';
 
-import { AdminStatsGrid }    from './sections/AdminStatsGrid';
-import { AdminDashboardChart } from './sections/AdminDashboardChart';
-import { AdminSalesRanking, AdminStockRanking } from './sections/AdminRankings';
-import { AdminActivity }     from './sections/AdminActivity';
-import { ActivityModal }     from './modal/ActivityModal';
-import { DateRangeSelector } from '@components/dashboard/DateRangeSelector';
-import { StockPurchaseChart } from '@components/dashboard/chart/StockPurchaseChart';
+import { WebStatsRow, StatsComparison }  from './sections/WebStatsRow';
+import { WebDualColumn }                 from './sections/WebDualColumn';
+import { WebActivityRow }                from './sections/WebActivityRow';
+import { WebDateBar }                    from './sections/WebDateBar';
+import { ActivityModal }                 from './modal/ActivityModal';
+
+// ─── Helper: periode sebelumnya ─────────────────────────────
+function getPreviousDateRange(preset: string, currentStart: Date) {
+  if (preset === 'today') {
+    const s = new Date(currentStart); s.setDate(s.getDate() - 1); s.setHours(0, 0, 0, 0);
+    const e = new Date(s); e.setHours(23, 59, 59, 999);
+    return { startDate: s, endDate: e };
+  }
+  if (preset === 'week') {
+    const e = new Date(currentStart); e.setDate(e.getDate() - 1); e.setHours(23, 59, 59, 999);
+    const s = new Date(e); s.setDate(s.getDate() - 6); s.setHours(0, 0, 0, 0);
+    return { startDate: s, endDate: e };
+  }
+  if (preset === 'month') {
+    const s = new Date(currentStart.getFullYear(), currentStart.getMonth() - 1, 1);
+    const e = new Date(currentStart.getFullYear(), currentStart.getMonth(), 0); e.setHours(23, 59, 59, 999);
+    return { startDate: s, endDate: e };
+  }
+  const y = currentStart.getFullYear() - 1;
+  return { startDate: new Date(y, 0, 1), endDate: new Date(y, 11, 31, 23, 59, 59, 999) };
+}
+
+const PERIOD_LABEL: Record<string, string> = {
+  today: 'vs kemarin', week: 'vs minggu lalu',
+  month: 'vs bulan lalu', year: 'vs tahun lalu',
+};
 
 const AdminDashboardWeb = () => {
   const navigation = useNavigation<any>();
@@ -26,129 +53,153 @@ const AdminDashboardWeb = () => {
     selectedPreset, refreshData, setPresetRange,
   } = useDashboard();
 
-  const [modalVisible, setModalVisible] = useState(false);
+  const [modalVisible, setModalVisible]             = useState(false);
   const [currentDisplayName, setCurrentDisplayName] = useState('User Swiftstock');
+  const [refreshing, setRefreshing]                 = useState(false);
+  const [periodCompare, setPeriodCompare]           = useState<PeriodCompareData | undefined>();
+  const [comparison, setComparison]                 = useState<StatsComparison | undefined>();
+
+  // Primitive deps untuk useEffect komparasi
+  const statsRevenue      = stats?.totalRevenue      ?? -1;
+  const statsTransactions = stats?.totalTransactions ?? -1;
+  const statsProfit       = stats?.totalProfit       ?? -1;
+
+  // Fetch data periode sebelumnya untuk komparasi top cards + PeriodCompare
+  useEffect(() => {
+    if (!tenantId) return;
+    const now = new Date();
+    let currentStart = new Date(now);
+    if (selectedPreset === 'today')       { currentStart.setHours(0, 0, 0, 0); }
+    else if (selectedPreset === 'week')   { const d = now.getDay() || 7; currentStart.setDate(now.getDate() - d + 1); currentStart.setHours(0, 0, 0, 0); }
+    else if (selectedPreset === 'month')  { currentStart = new Date(now.getFullYear(), now.getMonth(), 1); }
+    else                                  { currentStart = new Date(now.getFullYear(), 0, 1); }
+
+    const prevRange = getPreviousDateRange(selectedPreset, currentStart);
+
+    DashboardService.fetchDashboardStats(tenantId, prevRange, selectedPreset)
+      .then(prev => {
+        // Data untuk WebStatsRow top cards
+        setComparison({
+          prevRevenue:      prev.totalRevenue,
+          prevTransactions: prev.totalTransactions,
+        });
+        // Data untuk PeriodCompareCard
+        setPeriodCompare({
+          current:  { revenue: statsRevenue,      transactions: statsTransactions, profit: statsProfit },
+          previous: { revenue: prev.totalRevenue, transactions: prev.totalTransactions, profit: prev.totalProfit },
+          periodLabel: PERIOD_LABEL[selectedPreset] || 'vs sebelumnya',
+        });
+      })
+      .catch(() => { setComparison(undefined); setPeriodCompare(undefined); });
+  }, [tenantId, selectedPreset, statsRevenue, statsTransactions, statsProfit]);
+
+  useEffect(() => { refreshData(); }, [refreshData]);
 
   useEffect(() => {
-    refreshData();
     const name = auth.currentUser?.displayName || stats?.userName || 'User Swiftstock';
     setCurrentDisplayName(name);
-  }, [refreshData, stats?.userName]);
+  }, [stats?.userName]);
 
-  const getDateLabel = () => {
-    const labels: Record<string, string> = {
-      today: 'Hari ini',
-      week:  '7 Hari Terakhir',
-      month: '30 Hari Terakhir',
-      year:  '1 Tahun',
-    };
+  const getDateLabel = useCallback(() => {
+    const labels: Record<string, string> = { today: 'Hari ini', week: '7 Hari Terakhir', month: '30 Hari Terakhir', year: '1 Tahun' };
     return labels[selectedPreset] || 'Hari ini';
-  };
+  }, [selectedPreset]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true); await refreshData(); setRefreshing(false);
+  }, [refreshData]);
+
+  // Memoize semua array/object agar React.memo di children efektif
+  const moneyData       = useMemo(() => stats?.moneyData       ?? [], [stats?.moneyData]);
+  const unitData        = useMemo(() => stats?.unitData        ?? [], [stats?.unitData]);
+  const stockNewData    = useMemo(() => stats?.stockNewData    ?? [], [stats?.stockNewData]);
+  const hourlyData      = useMemo(() => stats?.hourlyData,            [stats?.hourlyData]);
+  const salesRanking    = useMemo(() => stats?.salesRanking    ?? [], [stats?.salesRanking]);
+  const stockRanking    = useMemo(() => stats?.stockRanking    ?? [], [stats?.stockRanking]);
+  const paymentData     = useMemo(() => stats?.paymentData     ?? [], [stats?.paymentData]);
+  const memberStats     = useMemo(() => stats?.memberStats,           [stats?.memberStats]);
+  const activitiesSlice = useMemo(() => activities?.slice(0, 10) ?? [], [activities]);
+
+  // unitData dengan newProducts sub-indikator digabung dari stockNewData
+  const unitDataEnriched = useMemo(() => {
+    if (!unitData.length || !stockNewData.length) return unitData;
+    return unitData.map((d, i) => ({
+      ...d,
+      newProducts: (stockNewData[i] as any)?.value ?? 0,
+    }));
+  }, [unitData, stockNewData]);
+
+  const onSeeMoreActivity = useCallback(() => setModalVisible(true), []);
+  const onSeeMoreSales    = useCallback(() => navigation.navigate('WebProducts', { filterType: 'sold-desc' }), [navigation]);
+  const onSeeMoreStock    = useCallback(() => navigation.navigate('WebProducts', { filterType: 'stock-critical' }), [navigation]);
 
   return (
     <View style={styles.root}>
 
-      {/* ── TOOLBAR — sticky ──────────────────────────────── */}
-      <View style={styles.toolbar}>
-        <View>
-          <Text style={styles.periodLabel}>Periode Analisis</Text>
-          <Text style={styles.periodValue}>{getDateLabel()}</Text>
-        </View>
-        <DateRangeSelector
-          selectedPreset={selectedPreset}
-          onSelectPreset={setPresetRange}
-        />
-      </View>
+      <WebDateBar
+        selectedPreset={selectedPreset}
+        onSelectPreset={setPresetRange}
+        dateLabel={getDateLabel()}
+        onRefresh={handleRefresh}
+        refreshing={refreshing}
+      />
 
-      {/* ── SCROLL AREA ───────────────────────────────────── */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* STATS GRID */}
-        <AdminStatsGrid
-          totalProducts={stats?.totalProducts || 0}
-          totalIn={stats?.totalIn || 0}
-          totalOut={stats?.totalOut || 0}
-          dateLabel={getDateLabel()}
+        {/* ROW 1 — 4 Metrik Utama Dinamis */}
+        <WebStatsRow
+          totalRevenue={stats?.totalRevenue           ?? 0}
+          totalExpense={stats?.totalExpense           ?? 0}
+          totalTransactions={stats?.totalTransactions ?? 0}
+          totalIn={stats?.totalIn                     ?? 0}
+          totalOut={stats?.totalOut                   ?? 0}
+          totalNewProducts={stats?.totalNewProducts   ?? 0}
+          comparison={comparison}
+          selectedPreset={selectedPreset}
           isLoading={loading}
         />
 
-        {/* ── ROW 1: CHART PENJUALAN + CHART STOK MASUK ──── */}
-        <View style={styles.row}>
+        {/* ROW 2+3 — Dual Column: 3 chart kiri / 3 panel kanan */}
+        <WebDualColumn
+          moneyData={moneyData}
+          unitData={unitDataEnriched}
+          hourlyData={hourlyData}
+          totalRevenue={stats?.totalRevenue ?? 0}
+          totalExpense={stats?.totalExpense ?? 0}
+          totalProfit={stats?.totalProfit  ?? 0}
+          selectedPreset={selectedPreset}
+          dateRangeLabel={stats?.dateRangeLabel}
+          periodCompare={periodCompare}
+          paymentData={paymentData}
+          memberStats={memberStats}
+          salesRanking={salesRanking}
+          stockRanking={stockRanking}
+          onSeeMoreSales={onSeeMoreSales}
+          onSeeMoreStock={onSeeMoreStock}
+          isLoading={loading}
+        />
 
-          {/* Chart Penjualan */}
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Grafik Penjualan</Text>
-            <AdminDashboardChart
-              data={stats?.weeklyData || []}
-              isLoading={loading}
-              selectedPreset={selectedPreset}
-              dateRangeLabel={stats?.dateRangeLabel}
-            />
-          </View>
-
-          {/* Chart Stok Masuk */}
-          <View style={styles.card}>
-            <StockPurchaseChart
-              unitData={stats?.stockUnitData   || []}
-              valueData={stats?.stockValueData || []}
-              newData={stats?.stockNewData     || []}
-              isLoading={loading}
-              selectedPreset={selectedPreset}
-              dateRangeLabel={stats?.dateRangeLabel}
-            />
-          </View>
-        </View>
-
-        {/* ── ROW 2: ACTIVITY + RANKINGS ──────────────────── */}
-        <View style={[styles.row, styles.rowMt]}>
-
-          {/* Activity — 60% */}
-          <View style={[styles.card, styles.activityCol]}>
-            <AdminActivity
-              activities={activities?.slice(0, 8) || []}
-              currentUserName={currentDisplayName}
-              onSeeMore={() => setModalVisible(true)}
-              tenantId={tenantId || ''}
-            />
-          </View>
-
-          {/* Rankings — 40% */}
-          <View style={styles.rankingCol}>
-            <View style={styles.card}>
-              <AdminSalesRanking
-                title="Produk Terlaris"
-                data={stats?.salesRanking || []}
-                unit="Terjual"
-                color={COLORS.secondary}
-                onSeeMore={() => navigation.navigate('WebProducts', { filterType: 'sold-desc' })}
-              />
-            </View>
-            <View style={[styles.card, styles.cardMt]}>
-              <AdminStockRanking
-                title="Stok Kritis"
-                data={stats?.stockRanking || []}
-                unit="Sisa"
-                color="#ef4444"
-                onSeeMore={() => navigation.navigate('WebProducts', { filterType: 'stock-critical' })}
-              />
-            </View>
-          </View>
-        </View>
+        {/* ROW 4 — Aktivitas Full-Width (mandiri, tidak ada elemen di samping) */}
+        <WebActivityRow
+          activities={activitiesSlice}
+          currentUserName={currentDisplayName}
+          tenantId={tenantId || ''}
+          isLoading={loading}
+          onSeeMore={onSeeMoreActivity}
+        />
 
         <Text style={styles.footer}>Swiftstock POS Hybrid • SaaS Edition 2026</Text>
       </ScrollView>
 
-      {/* MODALS */}
       <ActivityModal
         visible={modalVisible}
         onClose={() => setModalVisible(false)}
         currentUserName={currentDisplayName}
       />
 
-      {/* FLOATING LOADER */}
       {loading && (
         <View style={styles.floatingLoader}>
           <ActivityIndicator size="small" color={COLORS.secondary} />
@@ -160,78 +211,17 @@ const AdminDashboardWeb = () => {
 };
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: '#F8FAFC',
-    // @ts-ignore
-    overflow: 'hidden',
-  },
-
-  // TOOLBAR
-  toolbar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-    ...Platform.select({ web: { boxShadow: '0px 2px 8px rgba(0,0,0,0.03)' } as any }),
-  },
-  periodLabel: {
-    fontSize: 11, fontFamily: 'PoppinsRegular', color: '#94A3B8',
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  periodValue: { fontSize: 15, fontFamily: 'PoppinsSemiBold', color: '#1E293B', marginTop: 2 },
-
-  // SCROLL
-  scroll:        { flex: 1 },
-  scrollContent: { padding: 24, paddingBottom: 48 },
-
-  // ROW — 2 kolom equal
-  row: {
-    flexDirection: 'row',
-    gap: 20,
-    marginTop: 20,
-  },
-  rowMt: { marginTop: 20 },
-
-  // CARD
-  card: {
-    flex: 1,
-    backgroundColor: '#FFF',
-    borderRadius: 16,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
-    ...Platform.select({
-      web: { boxShadow: '0px 4px 16px rgba(0,0,0,0.04)' } as any,
-      default: { elevation: 2, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8 },
-    }),
-  },
-  cardMt:      { marginTop: 20 },
-  cardTitle:   { fontSize: 14, fontFamily: 'PoppinsSemiBold', color: '#1E293B', marginBottom: 12 },
-
-  // Row 2 kolom tidak equal
-  activityCol: { flex: 1.4 },
-  rankingCol:  { flex: 1, flexDirection: 'column' },
-
-  // FOOTER
-  footer: {
-    textAlign: 'center', color: '#CBD5E1',
-    fontSize: 11, marginTop: 48, fontFamily: 'PoppinsRegular',
-  },
-
-  // FLOATING LOADER
-  floatingLoader: {
-    position: 'absolute', top: 72, right: 24,
-    backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 8,
-    borderWidth: 1, borderColor: '#E2E8F0',
-    ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.08)' } as any }),
-  },
-  loaderText: { fontSize: 12, color: COLORS.secondary, fontFamily: 'PoppinsMedium' },
+  root:          { flex: 1, backgroundColor: '#F0F4F8', overflow: 'hidden' as any,
+                   ...Platform.select({ web: { contain: 'strict' } as any }) },
+  scroll:        { flex: 1, ...Platform.select({ web: { willChange: 'transform' } as any }) },
+  scrollContent: { padding: 24, paddingBottom: 56 },
+  footer:        { textAlign: 'center', color: '#CBD5E1', fontSize: 11, marginTop: 48, fontFamily: 'PoppinsRegular' },
+  floatingLoader:{ position: 'absolute', top: 72, right: 24, backgroundColor: '#FFF',
+                   paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
+                   flexDirection: 'row', alignItems: 'center', gap: 8,
+                   borderWidth: 1, borderColor: '#E2E8F0',
+                   ...Platform.select({ web: { boxShadow: '0px 8px 20px rgba(0,0,0,0.08)' } as any }) },
+  loaderText:    { fontSize: 12, color: COLORS.secondary, fontFamily: 'PoppinsMedium' },
 });
 
 export default AdminDashboardWeb;

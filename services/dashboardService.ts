@@ -175,11 +175,15 @@ export class DashboardService {
       // ── PRODUCTS ────────────────────────────────────────
       const productsSnap = await getDocs(collection(db, 'tenants', tenantId, 'products'));
       let lowStockCount = 0;
+      // productCategoryMap: productId -> category name string (untuk TopCategoryChart)
+      const productCategoryMap = new Map<string, string>();
       const productsData = productsSnap.docs.map(doc => {
         const data = doc.data();
         const stock    = Number(data.stock    || 0);
         const soldCount= Number(data.soldCount|| 0);
         if (stock < 10) lowStockCount++;
+        // product.category adalah string nama langsung (bukan ID)
+        productCategoryMap.set(doc.id, (data.category as string) || 'Lainnya');
         return { id: doc.id, name: data.name || 'Tanpa Nama', stock, soldCount };
       });
 
@@ -194,18 +198,82 @@ export class DashboardService {
       let totalRevenue = 0;
       let totalOut     = 0;
       const salesChartMap = this.generateChartDataMap(preset);
+      const stockOutMap   = this.generateChartDataMap(preset); // unit keluar per periode
+
+      // Payment method & member counters
+      const paymentMap = new Map<string, number>(); // method -> total Rp
+      let memberTxCount    = 0; // transaksi dari member
+      let nonMemberTxCount = 0;
+      let totalMemberSpend = 0;
+
+      // Category & period-bucket aggregation
+      const categoryMap  = new Map<string, { total: number; qty: number }>();
+
+      // periodBucketMap: key dinamis sesuai preset
+      // today → jam 0-23 (string "00"–"23")
+      // week  → nama hari "Sen"–"Min"
+      // month → tanggal "1"–"31"
+      // year  → nama bulan "Jan"–"Des"
+      const periodBucketMap = new Map<string, { count: number; revenue: number }>();
+      if (preset === 'today') {
+        for (let h = 0; h < 24; h++)
+          periodBucketMap.set(String(h).padStart(2,'0'), { count: 0, revenue: 0 });
+      } else if (preset === 'week') {
+        ['Sen','Sel','Rab','Kam','Jum','Sab','Min'].forEach(d =>
+          periodBucketMap.set(d, { count: 0, revenue: 0 }));
+      } else if (preset === 'month') {
+        for (let d = 1; d <= 31; d++)
+          periodBucketMap.set(String(d), { count: 0, revenue: 0 });
+      } else { // year
+        ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'].forEach(m =>
+          periodBucketMap.set(m, { count: 0, revenue: 0 }));
+      }
 
       transSnap.forEach(doc => {
         const data  = doc.data();
         const total = Number(data.total || 0);
         totalRevenue += total;
 
+        // Payment method aggregation
+        const method = (data.paymentMethod as string) || 'Tunai';
+        paymentMap.set(method, (paymentMap.get(method) || 0) + total);
+
+        // Member vs non-member — transaksi menyimpan di data.member.memberId
+        if (data.member?.memberId || data.memberId) {
+          memberTxCount++;
+          totalMemberSpend += total;
+        } else {
+          nonMemberTxCount++;
+        }
+
         const tDate = data.date?.toDate();
         if (tDate) {
           const key = this.getChartKey(tDate, preset);
           if (salesChartMap.has(key)) salesChartMap.set(key, (salesChartMap.get(key) || 0) + total);
+
+          // Period bucket aggregation (semua preset)
+          const bucketKey = this.getPeriodBucketKey(tDate, preset);
+          if (periodBucketMap.has(bucketKey)) {
+            const bd = periodBucketMap.get(bucketKey)!;
+            periodBucketMap.set(bucketKey, { count: bd.count + 1, revenue: bd.revenue + total });
+          }
+
           if (Array.isArray(data.items)) {
-            data.items.forEach((item: any) => { totalOut += Number(item.qty || 0); });
+            let txOut = 0;
+            data.items.forEach((item: any) => {
+              txOut += Number(item.qty || 0);
+              totalOut += Number(item.qty || 0);
+
+              // Category: lookup dari productCategoryMap via item.id
+              // (item hanya menyimpan id, name, price, qty, subtotal — tidak ada category)
+              const cat = productCategoryMap.get(item.id as string) || 'Lainnya';
+              const existing = categoryMap.get(cat) ?? { total: 0, qty: 0 };
+              categoryMap.set(cat, {
+                total: existing.total + Number(item.subtotal || item.price * item.qty || 0),
+                qty:   existing.qty   + Number(item.qty || 0),
+              });
+            });
+            if (stockOutMap.has(key)) stockOutMap.set(key, (stockOutMap.get(key) || 0) + txOut);
           }
         }
       });
@@ -227,6 +295,9 @@ export class DashboardService {
       const stockValueMap = this.generateChartDataMap(preset); // nilai rupiah
       const stockNewMap   = this.generateChartDataMap(preset); // produk baru
 
+      // Chart profit = revenue - expense per periode (diisi setelah kedua loop)
+      const profitChartMap = this.generateChartDataMap(preset);
+
       purchaseSnap.forEach(doc => {
         const data      = doc.data();
         const qty       = Number(data.quantity  || 0);
@@ -245,6 +316,13 @@ export class DashboardService {
           if (isNew && stockNewMap.has(key)) stockNewMap.set(key, (stockNewMap.get(key) || 0) + 1);
         }
       });
+
+      // ── PROFIT PER PERIODE (revenue - expense per key) ──
+      for (const [key] of profitChartMap) {
+        const rev = salesChartMap.get(key) || 0;
+        const exp = stockValueMap.get(key) || 0;
+        profitChartMap.set(key, rev - exp);
+      }
 
       // ── RANKINGS ─────────────────────────────────────────
       const stockRanking: ProductStat[] = [...productsData]
@@ -269,16 +347,68 @@ export class DashboardService {
         totalOut,
         totalNewProducts,
 
-        // Chart penjualan (sudah ada sebelumnya)
         weeklyData: Array.from(salesChartMap, ([label, value]) => ({ label, value })),
 
-        // ✅ BARU: Chart stok masuk — 3 metrik
+        // MoneyFlowChart — Pendapatan vs Modal per periode
+        moneyData: Array.from(salesChartMap.keys()).map(label => ({
+          label,
+          revenue: salesChartMap.get(label) || 0,
+          modal:   stockValueMap.get(label) || 0,
+        })),
+
+        // StockFlowChart — Stok Masuk vs Stok Keluar per periode
+        unitData: Array.from(salesChartMap.keys()).map(label => ({
+          label,
+          unitIn:  stockUnitMap.get(label) || 0,
+          unitOut: stockOutMap.get(label)  || 0,
+        })),
+
+        // NewProductChart
+        stockNewData:   Array.from(stockNewMap,   ([label, value]) => ({ label, value })),
+
+        // Legacy
         stockUnitData:  Array.from(stockUnitMap,  ([label, value]) => ({ label, value })),
         stockValueData: Array.from(stockValueMap, ([label, value]) => ({ label, value })),
-        stockNewData:   Array.from(stockNewMap,   ([label, value]) => ({ label, value })),
+        stockFlowData:  Array.from(salesChartMap.keys()).map(label => ({
+          label,
+          stockUnit: stockUnitMap.get(label)  || 0,
+          stockVal:  stockValueMap.get(label) || 0,
+          outUnit:   stockOutMap.get(label)   || 0,
+          revenue:   salesChartMap.get(label) || 0,
+        })),
 
         stockRanking,
         salesRanking,
+
+        // Metode Pembayaran — donut chart
+        paymentData: Array.from(paymentMap, ([method, total]) => ({ method, total })),
+
+        // Aktivitas Member
+        memberStats: {
+          memberTx:    memberTxCount,
+          nonMemberTx: nonMemberTxCount,
+          totalTx:     transSnap.size,
+          memberSpend: totalMemberSpend,
+          memberRate:  transSnap.size > 0
+            ? Math.round((memberTxCount / transSnap.size) * 100)
+            : 0,
+        },
+
+        // TopCategoryChart — group by kategori produk (via productCategoryMap)
+        categoryData: Array.from(categoryMap, ([category, v]) => ({ category, ...v }))
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 6),
+
+        // PeriodBucketChart — dinamis sesuai preset
+        hourlyData: Array.from(periodBucketMap, ([key, v]) => ({
+          key,
+          label: preset === 'today' ? `${key}:00` : key,
+          ...v,
+        })).filter(d => d.count > 0 || preset === 'today' || preset === 'week'),
+
+        // DailyTargetCard
+        todayRevenue: preset === 'today' ? totalRevenue : 0,
+
         dateRangeLabel: this.getDateRangeLabel(preset, dateRange),
       };
     } catch (error) {
@@ -357,6 +487,20 @@ export class DashboardService {
     }
     if (preset === 'year') return String(date.getMonth() + 1);
     return ['Min','Sen','Sel','Rab','Kam','Jum','Sab'][date.getDay()];
+  }
+
+  private static getPeriodBucketKey(date: Date, preset: string): string {
+    if (preset === 'today') {
+      return String(date.getHours()).padStart(2, '0');
+    }
+    if (preset === 'week') {
+      return ['Min','Sen','Sel','Rab','Kam','Jum','Sab'][date.getDay()];
+    }
+    if (preset === 'month') {
+      return String(date.getDate());
+    }
+    // year
+    return ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'][date.getMonth()];
   }
 
   static getPresetDateRange(preset: 'today' | 'week' | 'month' | 'year'): DateRange {

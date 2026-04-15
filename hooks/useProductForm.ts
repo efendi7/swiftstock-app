@@ -1,121 +1,190 @@
-import { useState, useCallback } from 'react';
-import { Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import { ProductService } from '../services/productService';
-import { ProductFormData } from '../types/product.types';
+/**
+ * useProductForm.ts — hook untuk Add & Edit produk
+ * Web-compatible: tidak pakai Alert.alert (silent di web)
+ */
 
-// Tambahkan tenantId sebagai parameter pertama
-export const useProductForm = (tenantId: string | null, onSuccess: () => void, productId?: string) => {
-  const [formData, setFormData] = useState<ProductFormData>({
-    name: '', price: '', purchasePrice: '', stock: '',
-    barcode: '', supplier: '', category: '', imageUrl: ''
-  });
+import { useState, useCallback, useRef } from 'react';
+import { Platform } from 'react-native';
+import { ProductService } from '@services/productService';
+import { ProductFormData } from '@/types/product.types';
 
-  const [originalData, setOriginalData] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+const EMPTY_FORM: ProductFormData = {
+  name: '', price: '', purchasePrice: '',
+  supplier: '', category: '', stock: '0',
+  barcode: '', imageUrl: '',
+};
+
+export function useProductForm(
+  tenantId:   string | null,
+  onSuccess:  () => void,
+  productId?: string,
+) {
+  const [formData,    setFormData]    = useState<ProductFormData>(EMPTY_FORM);
+  const [imageUri,    setImageUri]    = useState<string | null>(null);
+  const [loading,     setLoading]     = useState(false);
+  const [errorMsg,    setErrorMsg]    = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
-  const [imageUri, setImageUri] = useState<string | null>(null);
 
-  const updateField = useCallback((field: keyof ProductFormData, value: string) => {
+  // Snapshot data asli produk — dipakai sebagai oldData ke updateProduct
+  const oldDataRef = useRef<any>(null);
+
+  // ── setInitialData ─────────────────────────────────────────
+  const setInitialData = useCallback((data: ProductFormData, imgUri: string | null) => {
+    setFormData(data);
+    setImageUri(imgUri);
+    oldDataRef.current = {
+      name:          data.name,
+      price:         parseFloat(data.price)         || 0,
+      purchasePrice: parseFloat(data.purchasePrice) || 0,
+      stock:         parseInt(data.stock)           || 0,
+      barcode:       data.barcode,
+      supplier:      data.supplier,
+      category:      data.category,
+      imageUrl:      data.imageUrl,
+    };
+  }, []);
+
+  // ── updateField ────────────────────────────────────────────
+  const updateField = useCallback(<K extends keyof ProductFormData>(
+    field: K, value: ProductFormData[K]
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   }, []);
 
-  const setInitialData = useCallback((data: ProductFormData, existingImageUri: string | null) => {
-    setFormData(data);
-    setImageUri(existingImageUri);
-    setOriginalData({
-      name: data.name,
-      stock: parseInt(data.stock) || 0,
-      price: parseFloat(data.price) || 0,
-      purchasePrice: parseFloat(data.purchasePrice) || 0,
-      category: data.category || '',
-      supplier: data.supplier || ''
-    });
+  // ── generateBarcode ────────────────────────────────────────
+  const generateBarcode = useCallback((type: 'EAN13' | 'CODE128') => {
+    const code = ProductService.generateUniqueBarcode(type);
+    setFormData(prev => ({ ...prev, barcode: code }));
   }, []);
 
-  const generateBarcode = useCallback((type: 'EAN13' | 'CODE128') => {
-    const newBarcode = ProductService.generateUniqueBarcode(type);
-    updateField('barcode', newBarcode);
-  }, [updateField]);
-
-  const handleBarcodeScanned = useCallback((data: string) => {
-    updateField('barcode', data);
+  // ── handleBarcodeScanned ───────────────────────────────────
+  const handleBarcodeScanned = useCallback((code: string) => {
+    setFormData(prev => ({ ...prev, barcode: code }));
     setShowScanner(false);
-  }, [updateField]);
+  }, []);
 
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Izin Diperlukan', 'Aplikasi memerlukan izin akses galeri.');
+  // ── pickImage ──────────────────────────────────────────────
+  const pickImage = useCallback(async () => {
+    if (Platform.OS === 'web') {
+      try {
+        const input    = document.createElement('input');
+        input.type     = 'file';
+        input.accept   = 'image/*';
+        input.onchange = (e: any) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            const uri = ev.target?.result as string;
+            setImageUri(uri);
+            setFormData(prev => ({ ...prev, imageUrl: uri }));
+          };
+          reader.readAsDataURL(file);
+        };
+        input.click();
+      } catch { /* ignore */ }
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      setImageUri(result.assets[0].uri);
-    }
-  };
+    try {
+      const { launchImageLibraryAsync, MediaTypeOptions, requestMediaLibraryPermissionsAsync } =
+        await import('expo-image-picker');
+      const { status } = await requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return;
+      const result = await launchImageLibraryAsync({
+        mediaTypes: MediaTypeOptions.Images,
+        allowsEditing: true, aspect: [1, 1], quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        const uri = result.assets[0].uri;
+        setImageUri(uri);
+        setFormData(prev => ({ ...prev, imageUrl: uri }));
+      }
+    } catch (e) { console.warn('pickImage error:', e); }
+  }, []);
 
+  // ── removeImage ────────────────────────────────────────────
   const removeImage = useCallback(() => {
     setImageUri(null);
     setFormData(prev => ({ ...prev, imageUrl: '' }));
   }, []);
 
+  // ── resetForm ──────────────────────────────────────────────
   const resetForm = useCallback(() => {
-    setFormData({
-      name: '', price: '', purchasePrice: '', stock: '',
-      barcode: '', supplier: '', category: '', imageUrl: ''
-    });
+    setFormData(EMPTY_FORM);
     setImageUri(null);
-    setOriginalData(null);
+    setErrorMsg(null);
+    oldDataRef.current = null;
   }, []);
 
-  const handleSubmit = async () => {
-    if (loading) return;
-    if (!tenantId) {
-      Alert.alert('Error', 'Sesi Toko tidak valid. Silakan login kembali.');
+  // ── handleSubmit ───────────────────────────────────────────
+  const handleSubmit = useCallback(async () => {
+    if (!tenantId) { setErrorMsg('Tenant tidak ditemukan'); return; }
+    if (!formData.name || !formData.price || !formData.purchasePrice || !formData.barcode) {
+      setErrorMsg('Nama, Harga Jual, Harga Beli, dan Barcode wajib diisi.');
       return;
     }
 
-    setLoading(true);
     try {
-      let finalData = { ...formData };
-      
-      if (imageUri && !imageUri.startsWith('http')) {
-        const uploadedUrl = await ProductService.uploadImage(imageUri);
-        finalData.imageUrl = uploadedUrl;
-      } else {
-        finalData.imageUrl = imageUri || '';
+      setLoading(true);
+      setErrorMsg(null);
+
+      // Upload gambar jika ada URI lokal (bukan URL https yang sudah ada)
+      let finalImageUrl = formData.imageUrl || '';
+      if (imageUri && !imageUri.startsWith('https')) {
+        try {
+          finalImageUrl = await ProductService.uploadImage(imageUri);
+        } catch {
+          console.warn('Upload gambar gagal, lanjut tanpa gambar');
+          finalImageUrl = oldDataRef.current?.imageUrl || '';
+        }
       }
-      
+
+      const dataToSave: ProductFormData = {
+        ...formData,
+        imageUrl:      finalImageUrl      || '',
+        name:          formData.name?.trim()     || '',
+        barcode:       formData.barcode?.trim()  || '',
+        supplier:      formData.supplier         || '',
+        category:      formData.category         || '',
+      };
+
       if (productId) {
-        if (!originalData) throw new Error("Data asli tidak ditemukan.");
-        // Kirim tenantId ke updateProduct
-        await ProductService.updateProduct(tenantId, productId, finalData, originalData);
-        Alert.alert('Berhasil', 'Produk berhasil diperbarui');
+        // MODE EDIT
+        const old = oldDataRef.current ?? {
+          name: '', price: 0, purchasePrice: 0,
+          stock: 0, barcode: '', supplier: '', category: '', imageUrl: '',
+        };
+        await ProductService.updateProduct(tenantId, productId, dataToSave, old);
       } else {
-        // Kirim tenantId ke addProduct
-        await ProductService.addProduct(tenantId, finalData);
-        Alert.alert('Berhasil', 'Produk berhasil ditambahkan');
+        // MODE TAMBAH
+        const id = await ProductService.addProduct(tenantId, dataToSave);
+        if (!id) throw new Error('Gagal menyimpan produk');
       }
-      
-      resetForm();
+
+      // Panggil onSuccess — di modal ini akan tutup modal + refresh list
       onSuccess();
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Gagal menyimpan produk');
+
+    } catch (e: any) {
+      setErrorMsg(e.message || 'Terjadi kesalahan saat menyimpan');
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId, productId, formData, imageUri, onSuccess]);
 
   return {
-    formData, loading, showScanner, imageUri,
-    updateField, generateBarcode, handleBarcodeScanned,
-    handleSubmit, setShowScanner, pickImage, removeImage, resetForm,
-    setInitialData
+    formData,
+    loading,
+    errorMsg,
+    showScanner,
+    imageUri,
+    updateField,
+    generateBarcode,
+    handleBarcodeScanned,
+    handleSubmit,
+    setShowScanner,
+    pickImage,
+    removeImage,
+    resetForm,
+    setInitialData,
   };
-};
+}

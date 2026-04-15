@@ -1,7 +1,7 @@
 import React from 'react';
 import { FlatList, Text, StyleSheet, View } from 'react-native';
 import ProductCard from './ProductCard';
-import { Product } from '../../types/product.types';
+import { Product } from '@/types/product.types';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PackageSearch, Smile, Frown } from 'lucide-react-native';
 
@@ -12,7 +12,6 @@ interface Props {
   onEditPress:            (product: Product) => void;
   isAdmin?:               boolean;
   sortType?:              string;
-  // ✅ Load more props baru
   onEndReached?:          () => void;
   onEndReachedThreshold?: number;
   ListFooterComponent?:   React.ReactElement | null;
@@ -69,7 +68,6 @@ const ProductList = ({
       refreshing={refreshing}
       onRefresh={onRefresh}
       ListEmptyComponent={renderEmptyComponent}
-      // ✅ Load more
       onEndReached={onEndReached}
       onEndReachedThreshold={onEndReachedThreshold}
       ListFooterComponent={ListFooterComponent}

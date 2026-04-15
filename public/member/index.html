@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Kartu Member</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp }       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+    import { getFirestore, doc, getDoc, collection, query, where, orderBy, limit, getDocs }
+      from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyAfZ63azjsqeQ2ImPUhuZACgCB1NSdmoW4",
+  authDomain: "posreactnativeapp.firebaseapp.com",
+  projectId: "posreactnativeapp",
+  storageBucket: "posreactnativeapp.firebasestorage.app",
+  messagingSenderId: "15853364504",
+  appId: "1:15853364504:web:5d51e256a481369a2eea6d",
+};
+    // ────────────────────────────────────────────────────────
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // Ambil tenantId & memberId dari URL: /member/:tenantId/:memberId
+    const parts    = window.location.pathname.split('/').filter(Boolean);
+    const tenantId = parts[1];
+    const memberId = parts[2];
+
+    const DEFAULT_TIERS = [
+      { name: 'Reguler', minPoin: 0,    discount: 0,  color: '#94A3B8' },
+      { name: 'Silver',  minPoin: 100,  discount: 5,  color: '#64748B' },
+      { name: 'Gold',    minPoin: 500,  discount: 10, color: '#F59E0B' },
+      { name: 'Platinum',minPoin: 1000, discount: 15, color: '#8B5CF6' },
+    ];
+
+    async function loadAll() {
+      if (!tenantId || !memberId) { showError('Link tidak valid.'); return; }
+
+      try {
+        // Parallel fetch
+        const [memberSnap, settingsSnap, cardSnap, profileSnap] = await Promise.all([
+          getDoc(doc(db, 'tenants', tenantId, 'members', memberId)),
+          getDoc(doc(db, 'tenants', tenantId, 'config', 'member_settings')),
+          getDoc(doc(db, 'tenants', tenantId, 'config', 'card_design')),
+          getDoc(doc(db, 'tenants', tenantId, 'config', 'store_profile')),
+        ]);
+
+        if (!memberSnap.exists()) { showError('Member tidak ditemukan.'); return; }
+
+        const member  = { id: memberId, ...memberSnap.data() };
+        const settings= settingsSnap.exists() ? settingsSnap.data() : {};
+        const card    = cardSnap.exists()     ? cardSnap.data()     : {};
+        const profile = profileSnap.exists()  ? profileSnap.data()  : {};
+
+        // Tiers aktif
+        const tiers = (settings.useCustomTiers && settings.customTiers?.length)
+          ? settings.customTiers
+          : DEFAULT_TIERS;
+
+        // Riwayat transaksi member (5 terakhir)
+        let transactions = [];
+        try {
+          const txQ = query(
+            collection(db, 'tenants', tenantId, 'transactions'),
+            where('member.memberId', '==', memberId),
+            orderBy('date', 'desc'),
+            limit(5)
+          );
+          const txSnap = await getDocs(txQ);
+          transactions = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch(e) { /* transaksi opsional */ }
+
+        render(member, tiers, settings, card, profile, transactions);
+      } catch(e) {
+        console.error(e);
+        showError('Gagal memuat data. Coba lagi.');
+      }
+    }
+
+    function getTierIndex(tierName, tiers) {
+      return tiers.findIndex(t => t.name === tierName);
+    }
+
+    function getNextTier(tierName, tiers) {
+      const idx = getTierIndex(tierName, tiers);
+      return idx < tiers.length - 1 ? tiers[idx + 1] : null;
+    }
+
+    function render(member, tiers, settings, card, profile, transactions) {
+      const storeName   = profile.storeName || 'Toko';
+      const currentTier = tiers.find(t => t.name === member.tier) || tiers[0];
+      const nextTier    = getNextTier(member.tier, tiers);
+      const poinToNext  = nextTier ? nextTier.minPoin - member.poin : 0;
+      const progress    = nextTier
+        ? Math.min(100, ((member.poin - currentTier.minPoin) / (nextTier.minPoin - currentTier.minPoin)) * 100)
+        : 100;
+      const redeemRate  = settings.redeemRate || 100;
+      const pointsPerRp = settings.pointsPerRupiah || 1000;
+
+      // Card background
+      let cardBg = '';
+      if (card.backgroundType === 'image' && card.backgroundImageUrl) {
+        cardBg = `background: url('${card.backgroundImageUrl}') center/cover no-repeat;`;
+      } else if (card.backgroundType === 'gradient' && card.gradientColors) {
+        cardBg = `background: linear-gradient(135deg, ${card.gradientColors[0]}, ${card.gradientColors[1]});`;
+      } else {
+        cardBg = `background: ${card.backgroundColor || '#1C3A5A'};`;
+      }
+      const textColor = card.textColor === 'dark' ? '#1E293B' : '#FFFFFF';
+      const textMuted = card.textColor === 'dark' ? 'rgba(30,41,59,0.6)' : 'rgba(255,255,255,0.65)';
+
+      // QR via Google Charts API
+      const qrUrl    = encodeURIComponent(window.location.href);
+      const qrImgSrc = `https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=${qrUrl}&choe=UTF-8`;
+
+      // Tier table rows
+      const tierRows = tiers.map(t => `
+        <tr class="${t.name === member.tier ? 'active-tier' : ''}">
+          <td><span class="tier-dot" style="background:${t.color}"></span>${t.name}</td>
+          <td>${t.minPoin.toLocaleString('id')}+ poin</td>
+          <td>${t.discount > 0 ? `<strong>${t.discount}%</strong>` : '—'}</td>
+        </tr>`).join('');
+
+      // Transaksi rows
+      const txRows = transactions.length
+        ? transactions.map(tx => {
+            const d   = tx.date?.toDate?.() || new Date();
+            const fmt = d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
+            return `
+              <div class="tx-item">
+                <div class="tx-left">
+                  <span class="tx-no">${tx.transactionNumber || 'TRX'}</span>
+                  <span class="tx-date">${fmt}</span>
+                </div>
+                <div class="tx-right">
+                  <span class="tx-total">Rp ${(tx.total||0).toLocaleString('id')}</span>
+                  ${tx.member?.pointsEarned ? `<span class="tx-pts">+${tx.member.pointsEarned} poin</span>` : ''}
+                </div>
+              </div>`;
+          }).join('')
+        : '<p class="empty-tx">Belum ada riwayat transaksi.</p>';
+
+      document.getElementById('app').innerHTML = `
+        <div class="page">
+
+          <!-- STORE HEADER -->
+          <div class="store-header">
+            <div class="store-avatar">${storeName.slice(0,2).toUpperCase()}</div>
+            <div>
+              <div class="store-name">${storeName}</div>
+              <div class="store-sub">Program Member Loyalty</div>
+            </div>
+          </div>
+
+          <!-- MEMBER CARD -->
+          <div class="card-wrap">
+            <div class="member-card" style="${cardBg}">
+              <div class="card-top">
+                <div>
+                  <div class="card-store" style="color:${textMuted}">${storeName.toUpperCase()}</div>
+                  <div class="card-label" style="color:${textMuted}">MEMBER CARD</div>
+                </div>
+                <div class="tier-pill" style="border-color:${textMuted}; color:${textColor}">
+                  ${currentTier.name}
+                </div>
+              </div>
+              <div class="card-chip"></div>
+              <div class="card-bottom">
+                <div class="card-info">
+                  <div class="card-name" style="color:${textColor}">${member.name}</div>
+                  ${card.showPhone !== false ? `<div class="card-phone" style="color:${textMuted}">${member.phone}</div>` : ''}
+                  ${card.showPoints !== false ? `<div class="card-poin" style="color:${textMuted}">⭐ ${member.poin.toLocaleString('id')} poin</div>` : ''}
+                </div>
+                <div class="card-qr">
+                  <img src="${qrImgSrc}" alt="QR Member" />
+                </div>
+              </div>
+              <div class="card-id" style="color:${textMuted}">ID: ${memberId.slice(0,8).toUpperCase()}</div>
+            </div>
+          </div>
+
+          <!-- POIN & PROGRESS -->
+          <div class="section">
+            <div class="stat-grid">
+              <div class="stat-box">
+                <div class="stat-val" style="color:${currentTier.color}">${member.poin.toLocaleString('id')}</div>
+                <div class="stat-label">Poin Saya</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-val">${(member.totalSpend||0) >= 1000000
+                  ? ((member.totalSpend||0)/1000000).toFixed(1)+'jt'
+                  : ((member.totalSpend||0)/1000).toFixed(0)+'rb'}</div>
+                <div class="stat-label">Total Belanja</div>
+              </div>
+              <div class="stat-box">
+                <div class="stat-val">${member.totalVisits||0}x</div>
+                <div class="stat-label">Kunjungan</div>
+              </div>
+            </div>
+
+            ${nextTier ? `
+            <div class="progress-section">
+              <div class="progress-label">
+                <span>Progress ke <strong style="color:${nextTier.color}">${nextTier.name}</strong></span>
+                <span>${poinToNext.toLocaleString('id')} poin lagi</span>
+              </div>
+              <div class="progress-bar-bg">
+                <div class="progress-bar-fill" style="width:${progress}%; background:${nextTier.color}"></div>
+              </div>
+              <div class="progress-sub">
+                ${currentTier.name} (${currentTier.minPoin.toLocaleString('id')})
+                &nbsp;→&nbsp;
+                ${nextTier.name} (${nextTier.minPoin.toLocaleString('id')})
+              </div>
+            </div>` : `
+            <div class="top-badge">
+              <span>🏆 Anda sudah mencapai tier tertinggi!</span>
+            </div>`}
+          </div>
+
+          <!-- CARA REDEEM -->
+          <div class="section">
+            <div class="section-title">💰 Cara Pakai Poin</div>
+            <div class="redeem-card">
+              <div class="redeem-row">
+                <span class="redeem-icon">🛍️</span>
+                <div>
+                  <div class="redeem-main">Setiap belanja Rp ${pointsPerRp.toLocaleString('id')}</div>
+                  <div class="redeem-sub">mendapat 1 poin</div>
+                </div>
+              </div>
+              <div class="redeem-divider"></div>
+              <div class="redeem-row">
+                <span class="redeem-icon">⭐</span>
+                <div>
+                  <div class="redeem-main">1 poin = Rp ${redeemRate.toLocaleString('id')}</div>
+                  <div class="redeem-sub">tukar poin saat bayar di kasir</div>
+                </div>
+              </div>
+              <div class="redeem-divider"></div>
+              <div class="redeem-row">
+                <span class="redeem-icon">💡</span>
+                <div>
+                  <div class="redeem-main">Poin kamu saat ini</div>
+                  <div class="redeem-sub">= Rp ${(member.poin * redeemRate).toLocaleString('id')} diskon</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- TABEL BENEFIT TIER — DINAMIS -->
+          <div class="section">
+            <div class="section-title">👑 Benefit Tiap Tier</div>
+            <table class="tier-table">
+              <thead>
+                <tr><th>Tier</th><th>Minimal Poin</th><th>Diskon</th></tr>
+              </thead>
+              <tbody>${tierRows}</tbody>
+            </table>
+            <div class="tier-note">Tier dihitung otomatis dari total poin yang dikumpulkan.</div>
+          </div>
+
+          <!-- RIWAYAT TRANSAKSI -->
+          <div class="section">
+            <div class="section-title">🧾 Riwayat Transaksi</div>
+            <div class="tx-list">${txRows}</div>
+          </div>
+
+          <!-- FOOTER -->
+          <div class="footer">
+            Tunjukkan QR di atas kepada kasir untuk mendapatkan poin & diskon.
+          </div>
+
+        </div>`;
+
+      document.getElementById('loading').style.display = 'none';
+    }
+
+    function showError(msg) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').innerHTML = `
+        <div class="error-page">
+          <div class="error-icon">😔</div>
+          <div class="error-msg">${msg}</div>
+        </div>`;
+    }
+
+    loadAll();
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --primary:  #1C3A5A;
+      --secondary:#0EA5A0;
+      --bg:       #F0F4F8;
+      --surface:  #FFFFFF;
+      --text:     #1E293B;
+      --muted:    #64748B;
+      --border:   #E2E8F0;
+      --radius:   16px;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── LOADING ── */
+    #loading {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid var(--border);
+      border-top-color: var(--secondary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: var(--muted); font-size: 14px; }
+
+    /* ── PAGE ── */
+    .page {
+      max-width: 430px;
+      margin: 0 auto;
+      padding: 0 0 40px;
+      animation: fadeUp 0.5s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity:0; transform: translateY(16px); }
+      to   { opacity:1; transform: translateY(0); }
+    }
+
+    /* ── STORE HEADER ── */
+    .store-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 20px 20px 16px;
+      background: var(--primary);
+    }
+    .store-avatar {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.15);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Sora', sans-serif;
+      font-weight: 800; font-size: 16px;
+      color: #FFF;
+    }
+    .store-name {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 16px;
+      color: #FFF;
+    }
+    .store-sub { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 2px; }
+
+    /* ── MEMBER CARD ── */
+    .card-wrap { padding: 20px 20px 0; }
+    .member-card {
+      border-radius: 20px;
+      padding: 20px;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+      position: relative;
+      overflow: hidden;
+    }
+    .member-card::before {
+      content: '';
+      position: absolute;
+      top: -40px; right: -40px;
+      width: 160px; height: 160px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+    }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; }
+    .card-store { font-size: 9px; letter-spacing: 2px; font-weight: 600; }
+    .card-label { font-size: 11px; letter-spacing: 1px; margin-top: 2px; }
+    .tier-pill {
+      font-family: 'Sora', sans-serif;
+      font-size: 11px; font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      border: 1px solid;
+      letter-spacing: 0.5px;
+    }
+    .card-chip {
+      width: 36px; height: 28px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.2);
+      margin: 8px 0;
+      position: relative;
+    }
+    .card-chip::after {
+      content: '';
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      width: 20px; height: 14px;
+      border-radius: 3px;
+      border: 1px solid rgba(255,255,255,0.3);
+    }
+    .card-bottom { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+    .card-name   { font-family: 'Sora', sans-serif; font-weight: 700; font-size: 17px; }
+    .card-phone  { font-size: 12px; margin-top: 3px; }
+    .card-poin   { font-size: 12px; margin-top: 4px; }
+    .card-qr img { width: 72px; height: 72px; border-radius: 8px; background: #FFF; padding: 4px; }
+    .card-id     { font-size: 9px; letter-spacing: 1.5px; margin-top: 10px; }
+
+    /* ── SECTION ── */
+    .section {
+      margin: 16px 20px 0;
+      background: var(--surface);
+      border-radius: var(--radius);
+      padding: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .section-title {
+      font-family: 'Sora', sans-serif;
+      font-weight: 700; font-size: 14px;
+      color: var(--primary);
+      margin-bottom: 14px;
+    }
+
+    /* ── STATS ── */
+    .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 16px; }
+    .stat-box  { background: var(--bg); border-radius: 12px; padding: 12px 8px; text-align: center; }
+    .stat-val  { font-family: 'Sora', sans-serif; font-weight: 800; font-size: 18px; color: var(--primary); }
+    .stat-label{ font-size: 10px; color: var(--muted); margin-top: 3px; }
+
+    /* ── PROGRESS ── */
+    .progress-section  { margin-top: 4px; }
+    .progress-label    { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+    .progress-bar-bg   { height: 8px; background: var(--border); border-radius: 99px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 99px; transition: width 1s ease; }
+    .progress-sub      { font-size: 10px; color: var(--muted); margin-top: 6px; text-align: center; }
+    .top-badge         { background: linear-gradient(135deg, #FEF3C7, #FDE68A); border-radius: 10px; padding: 10px 14px; font-size: 13px; font-weight: 600; color: #92400E; text-align: center; }
+
+    /* ── REDEEM ── */
+    .redeem-card   { background: var(--bg); border-radius: 12px; overflow: hidden; }
+    .redeem-row    { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+    .redeem-icon   { font-size: 22px; flex-shrink: 0; }
+    .redeem-main   { font-weight: 600; font-size: 13px; }
+    .redeem-sub    { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .redeem-divider{ height: 1px; background: var(--border); margin: 0 14px; }
+
+    /* ── TIER TABLE ── */
+    .tier-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 13px;
+    }
+    .tier-table th {
+      text-align: left; padding: 8px 10px;
+      background: var(--bg);
+      font-size: 11px; color: var(--muted);
+      font-weight: 600; letter-spacing: 0.4px;
+    }
+    .tier-table td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .tier-table tr:last-child td { border-bottom: none; }
+    .tier-table tr.active-tier td { background: rgba(14,165,160,0.06); font-weight: 600; }
+    .tier-dot {
+      display: inline-block;
+      width: 8px; height: 8px; border-radius: 50%;
+      margin-right: 6px; vertical-align: middle;
+    }
+    .tier-note { font-size: 11px; color: var(--muted); margin-top: 10px; text-align: center; }
+
+    /* ── TRANSACTIONS ── */
+    .tx-list    { display: flex; flex-direction: column; gap: 8px; }
+    .tx-item    { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: var(--bg); border-radius: 10px; }
+    .tx-left    { display: flex; flex-direction: column; gap: 2px; }
+    .tx-no      { font-size: 12px; font-weight: 600; color: var(--text); }
+    .tx-date    { font-size: 11px; color: var(--muted); }
+    .tx-right   { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+    .tx-total   { font-size: 13px; font-weight: 700; color: var(--primary); }
+    .tx-pts     { font-size: 11px; color: #10B981; font-weight: 600; }
+    .empty-tx   { font-size: 13px; color: var(--muted); text-align: center; padding: 16px 0; }
+
+    /* ── FOOTER ── */
+    .footer {
+      margin: 20px 20px 0;
+      padding: 14px;
+      background: var(--primary);
+      border-radius: 12px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.8);
+      text-align: center;
+      line-height: 1.6;
+    }
+
+    /* ── ERROR ── */
+    .error-page  { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; }
+    .error-icon  { font-size: 48px; }
+    .error-msg   { font-size: 15px; color: var(--muted); text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Memuat kartu member...</p>
+  </div>
+  <div id="app"></div>
+</body>
+</html>

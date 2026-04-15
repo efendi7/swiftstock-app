@@ -14,7 +14,8 @@ interface BaseRecentActivityProps {
   title?: string;
   currentUserName: string;
   userRole: string;
-  tenantId: string; // ✅ TAMBAH: wajib untuk clearAllActivities
+  tenantId: string;
+  containerStyle?: 'card' | 'flat';
 }
 
 export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
@@ -23,7 +24,8 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
   title = 'Aktivitas Terbaru',
   currentUserName,
   userRole,
-  tenantId, // ✅ Terima prop tenantId
+  tenantId,
+  containerStyle = 'card',
 }) => {
   const [, setTick] = useState(0);
 
@@ -45,7 +47,7 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
           style: 'destructive',
           onPress: async () => {
             try {
-              // ✅ FIX: Kirim tenantId ke clearAllActivities
+              
               await DashboardService.clearAllActivities(tenantId);
               Alert.alert('Berhasil', 'Log aktivitas telah dibersihkan.');
             } catch (error) {
@@ -61,7 +63,7 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
   const limitedActivities = activities.slice(0, 5);
 
   return (
-    <BaseCard variant="ultraSoft" style={styles.card}>
+    <BaseCard variant={containerStyle === 'flat' ? 'flat' : 'ultraSoft'} style={containerStyle === 'flat' ? styles.cardFlat : styles.card}>
       <ActivityHeader
         title={title}
         showClear={userRole === 'admin' && hasActivities}
@@ -104,6 +106,7 @@ export const BaseRecentActivity: React.FC<BaseRecentActivityProps> = ({
 
 const styles = StyleSheet.create({
   card: { padding: 18, marginBottom: 20 },
+  cardFlat: { padding: 0, marginBottom: 0 },
   activitiesList: { gap: 0 },
   emptyContainer: { paddingVertical: 20, alignItems: 'center' },
   emptyText: { color: COLORS.textLight, fontSize: 12, fontFamily: 'PoppinsRegular' },

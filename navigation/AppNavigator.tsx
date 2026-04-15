@@ -5,55 +5,48 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// IMPORT SERVICES & CONSTANTS
 import { auth, db } from '@services/firebaseConfig';
 import { COLORS } from '@constants/colors';
 
-// SCREENS
 import { LandingPage } from '@/screens/public/LandingPage';
 import { LoginScreen, RegisterScreen } from '@/screens/auth';
 import { OnboardingScreen } from '@screens/onboarding';
 
-// WEB SPECIFIC
-import WebLayout from '@layouts/WebLayout';
-import AdminDashboardWeb from '@/screens/main/dashboard/admin/AdminDashboard.web';
-import SuperAdminDashboardWeb from '@/screens/main/dashboard/superadmin/SuperAdminDashboard.web';
+import WebLayout                 from '@layouts/WebLayout';
+import AdminDashboardWeb         from '@/screens/main/dashboard/admin/AdminDashboard.web';
+import SuperAdminDashboardWeb    from '@/screens/main/dashboard/superadmin/SuperAdminDashboard.web';
+import ProductScreenWeb          from '@/screens/main/product/ProductScreen.web';
+import TransactionScreenWeb      from '@/screens/main/transaction/TransactionScreen.web';
+import CashierManagementWeb      from '@/screens/main/cashier/CashierManagement.web';
+import MemberManagementWeb       from '@/screens/main/member/MemberManagament.web';
+import WebSettings               from '@/screens/main/settings/Setting.web';
+import MemberPublicScreen        from '@/screens/public/MemberPublicScreen';
 
-// ✅ WEB SCREENS
-import ProductScreenWeb from '@/screens/main/product/ProductScreen.web';
-import TransactionScreenWeb from '@/screens/main/transaction/TransactionScreen.web';
-import CashierManagementWeb from '@/screens/main/cashier/CashierManagement.web'; // Pastikan path ini benar
-
-// MOBILE SPECIFIC
-import AdminMobileNavigator from '@navigation/AdminMobileNavigator';
-import CashierMobileNavigator from '@navigation/CashierMobileNavigator';
-import CashierScreen from '@/screens/main/transaction/CashierScreen';
+import AdminMobileNavigator      from '@navigation/AdminMobileNavigator';
+import CashierMobileNavigator    from '@navigation/CashierMobileNavigator';
+import CashierScreen             from '@/screens/main/transaction/CashierScreen';
+import AttendanceHistoryScreen      from '@screens/main/attendance/AttendanceHistoryScreen';
+import AttendanceManagementWeb      from '@screens/main/attendance/AttendanceManagement.web';
 
 import { RootStackParamList, UserRole } from '@navigation/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<UserRole | null>(null);
-  const [tenantId, setTenantId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user,          setUser]          = useState<User | null>(null);
+  const [role,          setRole]          = useState<UserRole | null>(null);
+  const [tenantId,      setTenantId]      = useState<string | null>(null);
+  const [loading,       setLoading]       = useState(true);
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
 
   useEffect(() => {
     const checkOnboarding = async () => {
-      if (Platform.OS === 'web') {
-        setIsFirstLaunch(false);
-        return;
-      }
+      if (Platform.OS === 'web') { setIsFirstLaunch(false); return; }
       try {
         const value = await AsyncStorage.getItem('@alreadyLaunched');
         setIsFirstLaunch(value === null);
-      } catch (e) {
-        setIsFirstLaunch(false);
-      }
+      } catch { setIsFirstLaunch(false); }
     };
-
     checkOnboarding();
 
     const unsub = onAuthStateChanged(auth, async currentUser => {
@@ -65,23 +58,17 @@ const AppNavigator = () => {
             setRole(userData.role || 'cashier');
             setTenantId(userData.tenantId || null);
           } else {
-            setRole('cashier');
-            setTenantId(null);
+            setRole('cashier'); setTenantId(null);
           }
           setUser(currentUser);
-        } catch (error) {
-          console.error('Error fetching user role:', error);
-          setRole('cashier');
-          setUser(currentUser);
+        } catch {
+          setRole('cashier'); setUser(currentUser);
         }
       } else {
-        setUser(null);
-        setRole(null);
-        setTenantId(null);
+        setUser(null); setRole(null); setTenantId(null);
       }
       setLoading(false);
     });
-
     return unsub;
   }, []);
 
@@ -94,23 +81,19 @@ const AppNavigator = () => {
   }
 
   return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade_from_bottom',
-      }}>
+    <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}>
       {!user ? (
         <>
           <Stack.Screen name="LandingPage" component={LandingPage} />
           {isFirstLaunch && Platform.OS !== 'web' && (
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
           )}
-          <Stack.Screen name="Login" component={LoginScreen} options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="Login"    component={LoginScreen}    options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ animation: 'slide_from_right' }} />
         </>
       ) : (
         <>
-          {/* ==================== WEB ROUTES ==================== */}
+          {/* ── WEB ROUTES ─────────────────────────────────── */}
           {Platform.OS === 'web' && (
             <>
               <Stack.Screen name="Dashboard">
@@ -137,7 +120,6 @@ const AppNavigator = () => {
                 )}
               </Stack.Screen>
 
-              {/* ✅ STAFF MANAGEMENT ROUTE */}
               <Stack.Screen name="WebCashierManagement">
                 {() => (
                   <WebLayout role={role} tenantId={tenantId}>
@@ -146,11 +128,18 @@ const AppNavigator = () => {
                 )}
               </Stack.Screen>
 
-              {/* PLACEHOLDERS */}
+              <Stack.Screen name="WebMemberManagement">
+                {() => (
+                  <WebLayout role={role} tenantId={tenantId}>
+                    <MemberManagementWeb />
+                  </WebLayout>
+                )}
+              </Stack.Screen>
+
               <Stack.Screen name="WebSubscription">
                 {() => (
                   <WebLayout role={role} tenantId={tenantId}>
-                    <View style={styles.placeholderContainer}>
+                    <View style={styles.placeholder}>
                       <Text style={styles.placeholderText}>Subscription Management (Coming Soon)</Text>
                     </View>
                   </WebLayout>
@@ -160,16 +149,32 @@ const AppNavigator = () => {
               <Stack.Screen name="WebSettings">
                 {() => (
                   <WebLayout role={role} tenantId={tenantId}>
-                    <View style={styles.placeholderContainer}>
-                      <Text style={styles.placeholderText}>Settings Screen (Coming Soon)</Text>
-                    </View>
+                    <WebSettings />
+                  </WebLayout>
+                )}
+              </Stack.Screen>
+
+              {/* Riwayat absensi per kasir (dari modal detail) */}
+              <Stack.Screen name="AttendanceHistory">
+                {() => (
+                  <WebLayout role={role} tenantId={tenantId}>
+                    <AttendanceHistoryScreen />
+                  </WebLayout>
+                )}
+              </Stack.Screen>
+
+              {/* Manajemen absensi semua kasir — menu sidebar */}
+              <Stack.Screen name="WebAttendanceManagement">
+                {() => (
+                  <WebLayout role={role} tenantId={tenantId}>
+                    <AttendanceManagementWeb />
                   </WebLayout>
                 )}
               </Stack.Screen>
             </>
           )}
 
-          {/* ==================== MOBILE ROUTES ==================== */}
+          {/* ── MOBILE ROUTES ──────────────────────────────── */}
           {Platform.OS !== 'web' && (
             <>
               {role === 'superadmin' || role === 'admin' ? (
@@ -178,17 +183,30 @@ const AppNavigator = () => {
                 <Stack.Screen name="CashierMobileNavigator" component={CashierMobileNavigator} />
               )}
               <Stack.Screen name="Cashier" component={CashierScreen} />
+              {/* Riwayat absensi — bisa diakses kasir & admin mobile */}
+              <Stack.Screen
+                name="AttendanceHistory"
+                component={AttendanceHistoryScreen}
+                options={{ animation: 'slide_from_right' }}
+              />
             </>
           )}
         </>
       )}
+
+      {/* ── ROUTE PUBLIK — tidak perlu login ── */}
+      <Stack.Screen
+        name="MemberPublic"
+        component={MemberPublicScreen}
+        options={{ animation: 'none', headerShown: false }}
+      />
     </Stack.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
-  placeholderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  loading:         { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  placeholder:     { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' },
   placeholderText: { fontSize: 18, color: COLORS.textLight, fontWeight: '600' },
 });
 

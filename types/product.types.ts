@@ -1,21 +1,18 @@
-// Interface untuk data yang ditarik dari Database (Firestore)
 export interface Product {
   id: string;
   name: string;
   barcode: string;
   price: number;
   purchasePrice: number;
-  supplier: string;      // Sebaiknya wajib agar tidak error saat di-render
-  category: string;      // Sebaiknya wajib agar tidak error saat di-render
+  supplier: string; 
+  category: string; 
   stock: number;
-  soldCount: number;     // Penting untuk statistik penjualan
+  soldCount: number; 
   imageUrl?: string; 
   createdAt: any;
   updatedAt: any;
 }
 
-// Interface untuk data yang ada di State Form (Input User)
-// Di State Form, semua input angka biasanya bertipe 'string' karena dari TextInput
 export interface ProductFormData {
   name: string;
   price: string;
@@ -24,10 +21,9 @@ export interface ProductFormData {
   category: string;
   stock: string;
   barcode: string;
-  imageUrl: string;      // Wajib di state (bisa string kosong "")
+  imageUrl: string;     
 }
 
-// Interface untuk hasil validasi
 export interface ProductValidationResult {
   isValid: boolean;
   error?: string;
