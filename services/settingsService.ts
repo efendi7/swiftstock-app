@@ -68,7 +68,14 @@ export const SettingsService = {
   getStoreProfile: async (tenantId: string): Promise<StoreProfile> => {
     try {
       const snap = await getDoc(doc(db, 'tenants', tenantId, 'config', 'store_profile'));
-      if (!snap.exists()) return DEFAULT_STORE_PROFILE;
+      if (!snap.exists()) {
+        // Fallback: coba ambil nama dari top-level tenant document jika config belum pernah disimpan
+        const tenantSnap = await getDoc(doc(db, 'tenants', tenantId));
+        if (tenantSnap.exists() && tenantSnap.data().storeName) {
+            return { ...DEFAULT_STORE_PROFILE, storeName: tenantSnap.data().storeName };
+        }
+        return DEFAULT_STORE_PROFILE;
+      }
       return { ...DEFAULT_STORE_PROFILE, ...snap.data() } as StoreProfile;
     } catch { return DEFAULT_STORE_PROFILE; }
   },

@@ -164,6 +164,21 @@ export const handleCheckout = async (params: CheckoutParams): Promise<CheckoutRe
         stock:     data.stock - cart[i].qty,
         soldCount: (data.soldCount || 0) + cart[i].qty,
       });
+
+      const historyRef = doc(collection(db, 'tenants', tenantId, 'stock_history'));
+      trx.set(historyRef, {
+        productId: cart[i].id,
+        productName: cart[i].name,
+        type: 'OUT',
+        beforeStock: data.stock,
+        afterStock: data.stock - cart[i].qty,
+        qtyChange: cart[i].qty,
+        reason: 'Transaksi Penjualan',
+        reference: transactionNumber,
+        date: serverTimestamp(),
+        userId: user.uid,
+        userName: cashierName || user.displayName || '',
+      });
     }
 
     // 4. Simpan transaksi

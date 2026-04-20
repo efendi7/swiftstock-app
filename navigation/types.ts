@@ -6,6 +6,7 @@ export type RootStackParamList = {
   // ── PUBLIC ──────────────────────────────────────────
   LandingPage:  undefined;
   Onboarding:   undefined;
+  StoreSetup:   undefined;
   Login:        undefined;
   Register:     undefined;
   MemberPublic: { tenantId: string; memberId: string };
@@ -19,6 +20,7 @@ export type RootStackParamList = {
   WebSubscription:      undefined;
   WebSettings:          undefined;
   WebAttendanceManagement: undefined;
+  WebReports:           undefined;
 
   // ── MOBILE ──────────────────────────────────────────
   AdminMobileNavigator:   NavigatorScreenParams<AdminTabParamList>;

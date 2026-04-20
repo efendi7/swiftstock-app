@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View, StyleSheet, Platform, Text } from 'react-native';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { auth, db } from '@services/firebaseConfig';
@@ -11,6 +11,7 @@ import { COLORS } from '@constants/colors';
 import { LandingPage } from '@/screens/public/LandingPage';
 import { LoginScreen, RegisterScreen } from '@/screens/auth';
 import { OnboardingScreen } from '@screens/onboarding';
+import StoreSetupScreen from '@screens/onboarding/StoreSetupScreen';
 
 import WebLayout                 from '@layouts/WebLayout';
 import AdminDashboardWeb         from '@/screens/main/dashboard/admin/AdminDashboard.web';
@@ -19,6 +20,7 @@ import ProductScreenWeb          from '@/screens/main/product/ProductScreen.web'
 import TransactionScreenWeb      from '@/screens/main/transaction/TransactionScreen.web';
 import CashierManagementWeb      from '@/screens/main/cashier/CashierManagement.web';
 import MemberManagementWeb       from '@/screens/main/member/MemberManagament.web';
+import ReportsScreenWeb          from '@/screens/main/reports/ReportsScreen.web';
 import WebSettings               from '@/screens/main/settings/Setting.web';
 import MemberPublicScreen        from '@/screens/public/MemberPublicScreen';
 
@@ -34,10 +36,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
   const [user,          setUser]          = useState<User | null>(null);
-  const [role,          setRole]          = useState<UserRole | null>(null);
-  const [tenantId,      setTenantId]      = useState<string | null>(null);
-  const [loading,       setLoading]       = useState(true);
-  const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
+  const [role,            setRole]            = useState<UserRole | null>(null);
+  const [tenantId,        setTenantId]        = useState<string | null>(null);
+  const [isSetupComplete, setIsSetupComplete] = useState<boolean>(true);
+  const [loading,         setLoading]         = useState(true);
+  const [isFirstLaunch,   setIsFirstLaunch]   = useState<boolean | null>(null);
 
   useEffect(() => {
     const checkOnboarding = async () => {
@@ -49,27 +52,46 @@ const AppNavigator = () => {
     };
     checkOnboarding();
 
-    const unsub = onAuthStateChanged(auth, async currentUser => {
+    let unsubUserDoc: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, currentUser => {
+      // Bersihkan listener dokumen user jika ada (saat user ganti akun / logout)
+      if (unsubUserDoc) {
+        unsubUserDoc();
+        unsubUserDoc = null;
+      }
+
       if (currentUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setRole(userData.role || 'cashier');
-            setTenantId(userData.tenantId || null);
-          } else {
-            setRole('cashier'); setTenantId(null);
+        // Gunakan onSnapshot agar ketika isSetupComplete diupdate dari StoreSetupScreen, navigator langsung react!
+        unsubUserDoc = onSnapshot(doc(db, 'users', currentUser.uid), 
+          (userDoc) => {
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              setRole(userData.role || 'cashier');
+              setTenantId(userData.tenantId || null);
+              setIsSetupComplete(userData.isSetupComplete !== false);
+            } else {
+              setRole('cashier'); setTenantId(null); setIsSetupComplete(true);
+            }
+            setUser(currentUser);
+            setLoading(false);
+          }, 
+          (error) => {
+            console.error(error);
+            setRole('cashier'); setUser(currentUser); setIsSetupComplete(true);
+            setLoading(false);
           }
-          setUser(currentUser);
-        } catch {
-          setRole('cashier'); setUser(currentUser);
-        }
+        );
       } else {
         setUser(null); setRole(null); setTenantId(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return unsub;
+
+    return () => {
+      unsubAuth();
+      if (unsubUserDoc) unsubUserDoc();
+    };
   }, []);
 
   if (loading || isFirstLaunch === null) {
@@ -91,6 +113,8 @@ const AppNavigator = () => {
           <Stack.Screen name="Login"    component={LoginScreen}    options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="Register" component={RegisterScreen} options={{ animation: 'slide_from_right' }} />
         </>
+      ) : user && !isSetupComplete && role === 'admin' ? (
+        <Stack.Screen name="StoreSetup" component={StoreSetupScreen} options={{ animation: 'fade' }} />
       ) : (
         <>
           {/* ── WEB ROUTES ─────────────────────────────────── */}
@@ -132,6 +156,14 @@ const AppNavigator = () => {
                 {() => (
                   <WebLayout role={role} tenantId={tenantId}>
                     <MemberManagementWeb />
+                  </WebLayout>
+                )}
+              </Stack.Screen>
+
+              <Stack.Screen name="WebReports">
+                {() => (
+                  <WebLayout role={role} tenantId={tenantId}>
+                    <ReportsScreenWeb />
                   </WebLayout>
                 )}
               </Stack.Screen>

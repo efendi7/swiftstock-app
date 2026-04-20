@@ -1,5 +1,6 @@
 /**
  * ProductListWeb.tsx — tabel horizontal dengan gambar produk
+ * + prop compact untuk tablet (sembunyikan kolom opsional)
  */
 
 import React from 'react';
@@ -16,27 +17,30 @@ import EmptyState from '@components/common/web/EmptyState';
 import { COLORS } from '../../constants/colors';
 
 interface Props {
-  data: Product[];
-  refreshing: boolean;
-  onEditPress: (product: Product) => void;
-  isAdmin?: boolean;
-  sortType?: string;
+  data:           Product[];
+  refreshing:     boolean;
+  onEditPress:    (product: Product) => void;
+  isAdmin?:       boolean;
+  sortType?:      string;
+  compact?:       boolean; // tablet: sembunyikan kolom opsional
   usePagination?: boolean;
-  currentPage?: number;
-  totalPages?: number;
-  totalCount?: number;
-  pageSize?: number;
-  onPageChange?: (page: number) => void;
+  currentPage?:   number;
+  totalPages?:    number;
+  totalCount?:    number;
+  pageSize?:      number;
+  onPageChange?:  (page: number) => void;
 }
 
 const ProductListWeb = ({
   data, refreshing, onEditPress,
-  isAdmin = false, sortType,
+  isAdmin   = false,
+  sortType,
+  compact   = false,
   usePagination = false,
-  currentPage = 1,
-  totalPages = 1,
-  totalCount = 0,
-  pageSize = 20,
+  currentPage   = 1,
+  totalPages    = 1,
+  totalCount    = 0,
+  pageSize      = 20,
   onPageChange,
 }: Props) => {
 
@@ -45,13 +49,21 @@ const ProductListWeb = ({
   }
 
   if (data.length === 0) {
-    const emptyMsg = sortType === 'stock-safe'     ? 'Semua stok sedang kritis atau habis!' :
-                     sortType === 'stock-critical' ? 'Tidak ada stok yang kritis. Bagus!' :
-                     sortType === 'stock-empty'    ? 'Semua stok aman tersedia!' :
-                     'Belum ada produk. Tambah produk baru!';
-    const emptyColor = ['stock-critical','stock-empty'].includes(sortType ?? '') ? '#22C55E' :
-                       sortType === 'stock-safe' ? '#EF4444' : '#94A3B8';
-    return <EmptyState icon={<PackageSearch size={48} color={emptyColor} strokeWidth={1.5} />} message={emptyMsg} color={emptyColor} />;
+    const emptyMsg =
+      sortType === 'stock-safe'     ? 'Semua stok sedang kritis atau habis!' :
+      sortType === 'stock-critical' ? 'Tidak ada stok yang kritis. Bagus!'   :
+      sortType === 'stock-empty'    ? 'Semua stok aman tersedia!'             :
+      'Belum ada produk. Tambah produk baru!';
+    const emptyColor =
+      ['stock-critical', 'stock-empty'].includes(sortType ?? '') ? '#22C55E' :
+      sortType === 'stock-safe' ? '#EF4444' : '#94A3B8';
+    return (
+      <EmptyState
+        icon={<PackageSearch size={48} color={emptyColor} strokeWidth={1.5} />}
+        message={emptyMsg}
+        color={emptyColor}
+      />
+    );
   }
 
   const startIdx = usePagination ? (currentPage - 1) * pageSize : 0;
@@ -59,19 +71,25 @@ const ProductListWeb = ({
   return (
     <View style={styles.container}>
 
-      {/* TABLE HEADER */}
+      {/* ── TABLE HEADER ── */}
       <View style={styles.tableHead}>
         <Text style={[styles.th, styles.cNo]}>#</Text>
         <Text style={[styles.th, styles.cProduct]}>Produk</Text>
         <Text style={[styles.th, styles.cCategory]}>Kategori</Text>
-        <Text style={[styles.th, styles.cPrice,  { textAlign: 'right' as any }]}>Harga Jual</Text>
-        <Text style={[styles.th, styles.cCost,   { textAlign: 'right' as any }]}>Harga Beli</Text>
-        <Text style={[styles.th, styles.cStock,  { textAlign: 'center' as any }]}>Stok</Text>
-        <Text style={[styles.th, styles.cSold,   { textAlign: 'center' as any }]}>Terjual</Text>
-        {isAdmin && <Text style={[styles.th, styles.cAction, { textAlign: 'center' as any }]}>Aksi</Text>}
+        <Text style={[styles.th, styles.cPrice, { textAlign: 'right' as any }]}>Harga Jual</Text>
+        {!compact && (
+          <Text style={[styles.th, styles.cCost, { textAlign: 'right' as any }]}>Harga Beli</Text>
+        )}
+        <Text style={[styles.th, styles.cStock, { textAlign: 'center' as any }]}>Stok</Text>
+        {!compact && (
+          <Text style={[styles.th, styles.cSold, { textAlign: 'center' as any }]}>Terjual</Text>
+        )}
+        {isAdmin && (
+          <Text style={[styles.th, styles.cAction, { textAlign: 'center' as any }]}>Aksi</Text>
+        )}
       </View>
 
-      {/* ROWS */}
+      {/* ── ROWS ── */}
       {data.map((item, i) => (
         <Row
           key={item.id}
@@ -80,10 +98,11 @@ const ProductListWeb = ({
           isAdmin={isAdmin}
           isEven={i % 2 === 0}
           rowNumber={startIdx + i + 1}
+          compact={compact}
         />
       ))}
 
-      {/* FOOTER — Pagination reusable */}
+      {/* ── FOOTER / PAGINATION ── */}
       {usePagination ? (
         <Pagination
           currentPage={currentPage}
@@ -107,13 +126,19 @@ const ProductListWeb = ({
   );
 };
 
-// ── ROW ──────────────────────────────────────────────────
-const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
-  product: Product; onEditPress: (p: Product) => void;
-  isAdmin: boolean; isEven: boolean; rowNumber: number;
+// ── ROW ──────────────────────────────────────────────────────
+const Row = ({
+  product, onEditPress, isAdmin, isEven, rowNumber, compact,
+}: {
+  product:     Product;
+  onEditPress: (p: Product) => void;
+  isAdmin:     boolean;
+  isEven:      boolean;
+  rowNumber:   number;
+  compact:     boolean;
 }) => {
-  const stock  = product.stock || 0;
-  const status = stock <= 0 ? 'empty' : stock <= 10 ? 'critical' : 'safe';
+  const stock      = product.stock || 0;
+  const status     = stock <= 0 ? 'empty' : stock <= 10 ? 'critical' : 'safe';
   const stockColor = { safe: '#22C55E', critical: '#F59E0B', empty: '#EF4444' }[status];
   const stockBg    = { safe: '#F0FDF4', critical: '#FFFBEB', empty: '#FEF2F2' }[status];
 
@@ -125,7 +150,7 @@ const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
         <Text style={styles.rowNo}>{rowNumber}</Text>
       </View>
 
-      {/* PRODUK — thumbnail pakai <img> agar gambar Cloudinary tampil di web */}
+      {/* PRODUK */}
       <View style={[styles.cell, styles.cProduct]}>
         <View style={styles.thumb}>
           {product.imageUrl
@@ -139,7 +164,10 @@ const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={styles.productName} numberOfLines={1}>{product.name}</Text>
-          {product.barcode ? <Text style={styles.barcode}>{product.barcode}</Text> : null}
+          {product.barcode
+            ? <Text style={styles.barcode}>{product.barcode}</Text>
+            : null
+          }
         </View>
       </View>
 
@@ -155,10 +183,14 @@ const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
         <Text style={styles.priceText}>{fmt(product.price)}</Text>
       </View>
 
-      {/* HARGA BELI */}
-      <View style={[styles.cell, styles.cCost, { justifyContent: 'flex-end' as any }]}>
-        <Text style={styles.costText}>{product.purchasePrice ? fmt(product.purchasePrice) : '—'}</Text>
-      </View>
+      {/* HARGA BELI — disembunyikan di compact/tablet */}
+      {!compact && (
+        <View style={[styles.cell, styles.cCost, { justifyContent: 'flex-end' as any }]}>
+          <Text style={styles.costText}>
+            {product.purchasePrice ? fmt(product.purchasePrice) : '—'}
+          </Text>
+        </View>
+      )}
 
       {/* STOK */}
       <View style={[styles.cell, styles.cStock, { justifyContent: 'center' as any }]}>
@@ -171,21 +203,23 @@ const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
         </View>
       </View>
 
-      {/* TERJUAL */}
-      <View style={[styles.cell, styles.cSold, { justifyContent: 'center' as any }]}>
-        <View style={styles.soldBadge}>
-          <TrendingUp size={12} color={COLORS.secondary} />
-          <Text style={styles.soldVal}>{(product as any).soldCount || 0}</Text>
-          <Text style={styles.soldUnit}>terjual</Text>
+      {/* TERJUAL — disembunyikan di compact/tablet */}
+      {!compact && (
+        <View style={[styles.cell, styles.cSold, { justifyContent: 'center' as any }]}>
+          <View style={styles.soldBadge}>
+            <TrendingUp size={12} color={COLORS.secondary} />
+            <Text style={styles.soldVal}>{(product as any).soldCount || 0}</Text>
+            <Text style={styles.soldUnit}>terjual</Text>
+          </View>
         </View>
-      </View>
+      )}
 
       {/* AKSI */}
       {isAdmin && (
         <View style={[styles.cell, styles.cAction, { justifyContent: 'center' as any }]}>
           <TouchableOpacity style={styles.editBtn} onPress={() => onEditPress(product)}>
             <Pencil size={13} color={COLORS.primary} />
-            <Text style={styles.editBtnText}>Edit</Text>
+            {!compact && <Text style={styles.editBtnText}>Edit</Text>}
           </TouchableOpacity>
         </View>
       )}
@@ -193,18 +227,31 @@ const Row = ({ product, onEditPress, isAdmin, isEven, rowNumber }: {
   );
 };
 
+// ── Helpers ───────────────────────────────────────────────────
 const fmt = (v: number) => 'Rp ' + (v || 0).toLocaleString('id-ID');
 
+// ── Styles ────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
 
   tableHead: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#F1F5F9', borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 4,
   },
-  th: { fontSize: 11, fontFamily: 'PoppinsBold', color: '#94A3B8', textTransform: 'uppercase' as any, letterSpacing: 0.5 },
+  th: {
+    fontSize: 11,
+    fontFamily: 'PoppinsBold',
+    color: '#94A3B8',
+    textTransform: 'uppercase' as any,
+    letterSpacing: 0.5,
+  },
 
+  // Lebar kolom
   cNo:       { width: 36 },
   cProduct:  { flex: 3 },
   cCategory: { flex: 1.5 },
@@ -214,38 +261,85 @@ const styles = StyleSheet.create({
   cSold:     { flex: 1.5 },
   cAction:   { flex: 1 },
 
-  row:    { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 11, borderRadius: 8, marginBottom: 3, borderWidth: 1, borderColor: '#F1F5F9' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 8,
+    marginBottom: 3,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
   rowAlt: { backgroundColor: '#FAFBFC' },
   cell:   { flexDirection: 'row', alignItems: 'center' },
 
-  rowNo:       { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#CBD5E1', textAlign: 'center' as any, width: 36 },
-  thumb:       { width: 32, height: 32, borderRadius: 8, backgroundColor: 'rgba(28,58,90,0.07)', alignItems: 'center', justifyContent: 'center', marginRight: 10, overflow: 'hidden' as any },
+  rowNo: {
+    fontSize: 11,
+    fontFamily: 'PoppinsRegular',
+    color: '#CBD5E1',
+    textAlign: 'center' as any,
+    width: 36,
+  },
+  thumb: {
+    width: 32, height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(28,58,90,0.07)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+    overflow: 'hidden' as any,
+  },
   productName: { fontSize: 13, fontFamily: 'PoppinsSemiBold', color: '#1E293B' },
-  barcode:     { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#94A3B8', marginTop: 1 },
+  barcode:     { fontSize: 11, fontFamily: 'PoppinsRegular',  color: '#94A3B8', marginTop: 1 },
 
-  catPill: { backgroundColor: '#EFF6FF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, maxWidth: 110 },
+  catPill: {
+    backgroundColor: '#EFF6FF',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    maxWidth: 110,
+  },
   catText: { fontSize: 12, fontFamily: 'PoppinsMedium', color: '#3B82F6' },
 
-  priceText: { fontSize: 13, fontFamily: 'PoppinsBold', color: '#1E293B' },
+  priceText: { fontSize: 13, fontFamily: 'PoppinsBold',    color: '#1E293B' },
   costText:  { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#64748B' },
 
-  stockBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
-  stockVal:   { fontSize: 13, fontFamily: 'PoppinsBold' },
-  stockUnit:  { fontSize: 11, fontFamily: 'PoppinsRegular' },
+  stockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  stockVal:  { fontSize: 13, fontFamily: 'PoppinsBold' },
+  stockUnit: { fontSize: 11, fontFamily: 'PoppinsRegular' },
 
-  soldBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#F0FDF4', borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4 },
-  soldVal:   { fontSize: 13, fontFamily: 'PoppinsBold', color: COLORS.secondary },
-  soldUnit:  { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#64748B' },
+  soldBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  soldVal:  { fontSize: 13, fontFamily: 'PoppinsBold',    color: COLORS.secondary },
+  soldUnit: { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#64748B' },
 
-  editBtn:     { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(28,58,90,0.07)', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 6, cursor: 'pointer' as any },
+  editBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(28,58,90,0.07)',
+    borderRadius: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    cursor: 'pointer' as any,
+  },
   editBtnText: { fontSize: 12, fontFamily: 'PoppinsSemiBold', color: COLORS.primary },
-
-
-
-
-  empty:       { alignItems: 'center', justifyContent: 'center', paddingVertical: 80 },
-  emptyCircle: { width: 100, height: 100, borderRadius: 50, alignItems: 'center', justifyContent: 'center', marginBottom: 20 },
-  emptyText:   { fontSize: 15, fontFamily: 'PoppinsBold', textAlign: 'center' as any, maxWidth: 280 },
 });
 
 export default ProductListWeb;

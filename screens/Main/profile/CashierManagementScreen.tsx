@@ -1,133 +1,133 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator } from 'react-native';
-import { ChevronLeft, Power, TrendingUp, ShoppingBag, User } from 'lucide-react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, StatusBar } from 'react-native';
+import { ChevronRight, User, Users } from 'lucide-react-native';
 import { COLORS } from '../../../constants/colors';
 import { DashboardService } from '../../../services/dashboardService';
-import { doc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebaseConfig';
+import { useAuth } from '../../../hooks/auth/useAuth';
+
+import { ScreenHeader } from '../../../components/common/ScreenHeader';
+import SkeletonLoadingMobile from '../../../components/common/SkeletonLoadingMobile';
+import { CashierDetailModal } from './modal/CashierDetailModal';
 
 const CashierManagementScreen = ({ navigation }: any) => {
+  const { tenantId } = useAuth();
   const [cashiers, setCashiers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const [selectedCashier, setSelectedCashier] = useState<any | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
 
   const loadData = async () => {
+    if (!tenantId) return;
     setLoading(true);
-    const data = await DashboardService.fetchCashierPerformance();
+    const data = await DashboardService.fetchCashierPerformance(tenantId);
     setCashiers(data);
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [tenantId]);
 
-  const toggleStatus = async (id: string, currentStatus: string, name: string) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    
-    Alert.alert(
-      newStatus === 'inactive' ? 'Nonaktifkan Kasir' : 'Aktifkan Kasir',
-      `Apakah Anda yakin ingin mengubah status akses ${name}?`,
-      [
-        { text: 'Batal', style: 'cancel' },
-        { 
-          text: 'Ya, Ubah', 
-          style: newStatus === 'inactive' ? 'destructive' : 'default',
-          onPress: async () => {
-            try {
-              await updateDoc(doc(db, 'users', id), { status: newStatus });
-              loadData(); // Refresh daftar
-            } catch (err) {
-              Alert.alert('Error', 'Gagal memperbarui status.');
-            }
-          }
-        }
-      ]
-    );
+  const handleCashierPress = (cashier: any) => {
+    setSelectedCashier(cashier);
+    setModalVisible(true);
   };
 
   const renderCashier = ({ item }: { item: any }) => (
-    <View style={[styles.card, item.status === 'inactive' && styles.inactiveCard]}>
-      <View style={styles.cardHeader}>
-        <View style={styles.userInfo}>
-          {item.photoURL ? (
-            <Image source={{ uri: item.photoURL }} style={styles.avatar} />
-          ) : (
-            <View style={styles.avatarPlaceholder}><User color="#CCC" /></View>
-          )}
-          <View>
-            <Text style={styles.nameText}>{item.name}</Text>
-            <Text style={styles.emailText}>{item.email}</Text>
-          </View>
+    <TouchableOpacity 
+      style={[styles.card, item.status === 'inactive' && styles.inactiveCard]}
+      onPress={() => handleCashierPress(item)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.cardLeft}>
+        {item.photoURL ? (
+          <Image source={{ uri: item.photoURL }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarPlaceholder}><User color="#94A3B8" size={24} /></View>
+        )}
+      </View>
+      
+      <View style={styles.cardCenter}>
+        <Text style={styles.nameText} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.emailText} numberOfLines={1}>{item.email || '-'}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: item.status === 'active' ? '#ECFDF5' : '#FEF2F2' }]}>
+          <Text style={[styles.statusText, { color: item.status === 'active' ? '#10B981' : '#EF4444' }]}>
+            {item.status === 'active' ? 'Aktif' : 'Nonaktif'}
+          </Text>
         </View>
-        <TouchableOpacity 
-          onPress={() => toggleStatus(item.id, item.status, item.name)}
-          style={[styles.statusToggle, { backgroundColor: item.status === 'active' ? '#10B98115' : '#EF444415' }]}
-        >
-          <Power size={18} color={item.status === 'active' ? '#10B981' : '#EF4444'} />
-        </TouchableOpacity>
       </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.statsRow}>
-        <View style={styles.statBox}>
-          <TrendingUp size={16} color={COLORS.primary} />
-          <Text style={styles.statLabel}>Omzet Hari Ini</Text>
-          <Text style={styles.statValue}>Rp {item.todayRevenue.toLocaleString('id-ID')}</Text>
-        </View>
-        <View style={styles.statBox}>
-          <ShoppingBag size={16} color={COLORS.secondary} />
-          <Text style={styles.statLabel}>Transaksi</Text>
-          <Text style={styles.statValue}>{item.transactionCount} Sesi</Text>
-        </View>
+      <View style={styles.cardRight}>
+        <ChevronRight size={20} color="#CBD5E1" />
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><ChevronLeft color="#000" /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Manajemen Kasir</Text>
-        <View style={{ width: 24 }} />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      <ScreenHeader
+        title="Daftar Kasir"
+        subtitle="Manajemen Pegawai"
+        icon={<Users size={24} color="#FFF" />}
+        onBackPress={() => navigation.goBack()}
+        backIcon="chevron"
+      />
+
+      <View style={styles.contentWrapper}>
+        {loading ? (
+          <View style={{ padding: 16 }}>
+            <SkeletonLoadingMobile type="product-list" rows={6} />
+          </View>
+        ) : (
+          <FlatList
+            data={cashiers}
+            renderItem={renderCashier}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.list}
+            ListEmptyComponent={<Text style={styles.empty}>Belum ada kasir terdaftar.</Text>}
+            showsVerticalScrollIndicator={false}
+            onRefresh={loadData}
+            refreshing={loading}
+          />
+        )}
       </View>
 
-      {loading ? (
-        <View style={styles.center}><ActivityIndicator color={COLORS.primary} size="large" /></View>
-      ) : (
-        <FlatList
-          data={cashiers}
-          renderItem={renderCashier}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={styles.empty}>Belum ada kasir terdaftar.</Text>}
-          onRefresh={loadData}
-          refreshing={loading}
-        />
-      )}
+      <CashierDetailModal
+        visible={modalVisible}
+        onClose={() => setModalVisible(false)}
+        cashier={selectedCashier}
+        onStatusChanged={loadData}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F9FA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 20, backgroundColor: '#FFF', paddingTop: 50 },
-  headerTitle: { fontSize: 18, fontFamily: 'PoppinsBold' },
-  list: { padding: 20 },
-  card: { backgroundColor: '#FFF', borderRadius: 15, padding: 15, marginBottom: 15, elevation: 2 },
-  inactiveCard: { opacity: 0.6, backgroundColor: '#F2F2F2' },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  userInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  avatar: { width: 45, height: 45, borderRadius: 22.5 },
-  avatarPlaceholder: { width: 45, height: 45, borderRadius: 22.5, backgroundColor: '#EEE', justifyContent: 'center', alignItems: 'center' },
-  nameText: { fontSize: 15, fontFamily: 'PoppinsSemiBold' },
-  emailText: { fontSize: 12, color: '#666' },
-  statusToggle: { padding: 10, borderRadius: 10 },
-  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 12 },
-  statsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  statBox: { flex: 1 },
-  statLabel: { fontSize: 10, color: '#999', marginVertical: 2 },
-  statValue: { fontSize: 13, fontFamily: 'PoppinsBold', color: '#333' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  empty: { textAlign: 'center', marginTop: 50, color: '#999' }
+  container: { flex: 1, backgroundColor: COLORS.background },
+  contentWrapper: { flex: 1 },
+  list: { padding: 16, paddingBottom: 100 },
+  card: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#FFF', 
+    borderRadius: 20, 
+    padding: 16, 
+    marginBottom: 12, 
+    borderWidth: 1, 
+    borderColor: '#F1F5F9' 
+  },
+  inactiveCard: { opacity: 0.6 },
+  cardLeft: { marginRight: 14 },
+  avatar: { width: 60, height: 60, borderRadius: 16 },
+  avatarPlaceholder: { width: 60, height: 60, borderRadius: 16, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#F1F5F9' },
+  cardCenter: { flex: 1, justifyContent: 'center' },
+  nameText: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B', marginBottom: 2 },
+  emailText: { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#64748B', marginBottom: 6 },
+  statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8 },
+  statusText: { fontSize: 10, fontFamily: 'PoppinsSemiBold' },
+  cardRight: { paddingLeft: 10, justifyContent: 'center' },
+  empty: { textAlign: 'center', marginTop: 50, color: '#94A3B8', fontFamily: 'PoppinsRegular' }
 });
 
 export default CashierManagementScreen;

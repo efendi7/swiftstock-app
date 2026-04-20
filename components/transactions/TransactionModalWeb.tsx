@@ -19,7 +19,7 @@ interface ModalProps {
 
 
 const s = StyleSheet.create({
-  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  overlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
   webOverlay: { justifyContent: 'center', alignItems: 'center' },
 
   // Web content
@@ -34,22 +34,27 @@ const s = StyleSheet.create({
     flexDirection: 'column' as any,
   },
 
-  // Header
+  // ── Header — dark themeColor bg, mirrors AddProductModal ──
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  headerTitle: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#1E293B' },
+  headerLeft:  { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  headerIcon:  {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerSub:   { fontSize: 10, fontFamily: 'PoppinsMedium', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' as any, letterSpacing: 0.5 },
+  headerTitle: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#FFF', marginTop: 1 },
   headerMeta:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
-  headerNo:    { fontSize: 12, fontFamily: 'PoppinsMedium', color: '#94A3B8' },
+  headerNo:    { fontSize: 12, fontFamily: 'PoppinsMedium', color: 'rgba(255,255,255,0.7)' },
   closeBtn:    {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: '#F8FAFC',
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     alignItems: 'center', justifyContent: 'center',
   },
 
@@ -154,8 +159,6 @@ const InfoRow = ({
   </View>
 );
 
-// ── STYLES ────────────────────────────────────────────────
-
 
 export const TransactionModal: React.FC<ModalProps> = ({
   visible, onClose, transaction, themeColor,
@@ -166,24 +169,22 @@ export const TransactionModal: React.FC<ModalProps> = ({
   const cashPaid  = transaction.cashAmount ?? (transaction as any).cashPaid ?? 0;
   const changeAmt = transaction.changeAmount ?? 0;
 
-  // ── SHARED SUB-COMPONENTS ────────────────────────────────
-
+  // ── Payment badge — now white-tinted for dark header ────
   const PaymentBadge = () => (
     <View style={[
       s.payBadge,
-      { backgroundColor: isQris ? '#FEF3C7' : '#ECFDF5',
-        borderColor:      isQris ? '#C4B5FD' : '#6EE7B7' },
+      { backgroundColor: 'rgba(255,255,255,0.15)', borderColor: 'rgba(255,255,255,0.3)' },
     ]}>
       {isQris
-        ? <QrCode   size={11} color="#D97706" />
-        : <Banknote size={11} color="#059669" />}
-      <Text style={[s.payBadgeText, { color: isQris ? '#D97706' : '#059669' }]}>
+        ? <QrCode   size={11} color="#FFF" />
+        : <Banknote size={11} color="#FFF" />}
+      <Text style={[s.payBadgeText, { color: '#FFF' }]}>
         {isQris ? 'QRIS' : 'Tunai'}
       </Text>
     </View>
   );
 
-  // Fixed footer — payment summary
+  // ── Fixed footer — payment summary ──────────────────────
   const PaymentFooter = () => (
     <View style={[s.payBlock, { backgroundColor: themeColor }]}>
       <View style={s.payRowTotal}>
@@ -214,8 +215,7 @@ export const TransactionModal: React.FC<ModalProps> = ({
     </View>
   );
 
-  // ── WEB MODAL ────────────────────────────────────────────
-  // Struk column kiri — only items list scrolls
+  // ── Receipt column (left) ────────────────────────────────
   const ReceiptColumn = () => (
     <View style={s.receiptCol}>
       <View style={s.receiptHeader}>
@@ -226,7 +226,6 @@ export const TransactionModal: React.FC<ModalProps> = ({
         </View>
       </View>
 
-      {/* Kolom label */}
       <View style={s.receiptColHeader}>
         <Text style={[s.receiptColLabel, { flex: 1 }]}>Nama Produk</Text>
         <Text style={[s.receiptColLabel, s.tCenter, { width: 32 }]}>Qty</Text>
@@ -235,7 +234,6 @@ export const TransactionModal: React.FC<ModalProps> = ({
       </View>
       <DashLine />
 
-      {/* Scroll hanya list produk */}
       <ScrollView style={s.receiptScroll} showsVerticalScrollIndicator={false} nestedScrollEnabled>
         {transaction.items.map((item, idx) => {
           const name = (item as any).name || item.productName || 'Produk';
@@ -267,7 +265,7 @@ export const TransactionModal: React.FC<ModalProps> = ({
     </View>
   );
 
-  // Kolom kanan — info + member, stretches full height
+  // ── Right column ─────────────────────────────────────────
   const RightColumn = () => (
     <View style={s.rightCol}>
       <View style={s.block}>
@@ -312,17 +310,23 @@ export const TransactionModal: React.FC<ModalProps> = ({
     <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
       <View style={[s.overlay, s.webOverlay]}>
         <View style={s.webContent}>
-          {/* Header */}
-          <View style={s.header}>
-            <View>
-              <Text style={s.headerTitle}>Detail Transaksi</Text>
-              <View style={s.headerMeta}>
-                <Text style={s.headerNo}>{transaction.transactionNumber}</Text>
-                <PaymentBadge />
+
+          {/* ── Header — dark themeColor bg ── */}
+          <View style={[s.header, { backgroundColor: themeColor }]}>
+            <View style={s.headerLeft}>
+              <View style={s.headerIcon}>
+                <Receipt size={18} color="#FFF" />
+              </View>
+              <View>
+                <Text style={s.headerSub}>Detail Transaksi</Text>
+                <View style={s.headerMeta}>
+                  <Text style={s.headerNo}>{transaction.transactionNumber}</Text>
+                  <PaymentBadge />
+                </View>
               </View>
             </View>
             <TouchableOpacity onPress={onClose} style={s.closeBtn}>
-              <X size={20} color="#64748B" />
+              <X size={18} color="#FFF" />
             </TouchableOpacity>
           </View>
 
@@ -340,5 +344,3 @@ export const TransactionModal: React.FC<ModalProps> = ({
     </Modal>
   );
 };
-
-// ── HELPERS ───────────────────────────────────────────────

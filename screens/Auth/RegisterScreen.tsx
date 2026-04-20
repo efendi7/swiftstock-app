@@ -58,7 +58,18 @@ const RegisterScreen = () => {
       // Generate Tenant ID untuk toko baru
       const tenantId = `tenant_${Date.now()}_${user.uid.substring(0, 8)}`;
 
-      // 1. Buat Tenant Document (Toko)
+      // 1. Buat User Document DULU agar hak akses isAdmin() Firestore terpenuhi
+      await setDoc(doc(db, 'users', user.uid), {
+        fullName,
+        email,
+        role: 'admin', // Default role saat register = admin (pemilik toko)
+        tenantId, // Link ke toko mereka
+        isSetupComplete: false, // Flag untuk workflow Store Setup
+        createdAt: new Date().toISOString(),
+        createdBy: user.uid, // Admin membuat akun sendiri
+      });
+
+      // 2. Buat Tenant Document (Toko) setelah rules bisa membaca role admin
       await setDoc(doc(db, 'tenants', tenantId), {
         name: `${fullName}'s Store`, // Bisa diganti nanti di settings
         adminId: user.uid,
@@ -66,16 +77,6 @@ const RegisterScreen = () => {
         subscriptionStatus: 'active',
         subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 hari
         createdAt: new Date().toISOString(),
-      });
-
-      // 2. Buat User Document
-      await setDoc(doc(db, 'users', user.uid), {
-        fullName,
-        email,
-        role: 'admin', // Default role saat register = admin (pemilik toko)
-        tenantId, // Link ke toko mereka
-        createdAt: new Date().toISOString(),
-        createdBy: user.uid, // Admin membuat akun sendiri
       });
 
       console.log('✅ Registration successful!');

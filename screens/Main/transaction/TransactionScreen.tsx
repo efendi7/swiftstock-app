@@ -11,6 +11,7 @@ import { ScreenHeader } from '../../../components/common/ScreenHeader';
 import { TransactionFilterSection, TransactionList } from '../../../components/transactions';
 import { FilterMode, SortType, Transaction } from '../../../types/transaction.type';
 import { TransactionService } from '../../../services/transactionService';
+import SkeletonLoadingMobile from '../../../components/common/SkeletonLoadingMobile';
 
 const PAGE_SIZE = 20;
 
@@ -158,8 +159,12 @@ const TransactionScreen = ({ navigation }: any) => {
 
   if ((loading || authLoading) && transactions.length === 0) {
     return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.secondary} />
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+        <ScreenHeader title={headerTitle} subtitle={userName} icon={headerIcon} />
+        <View style={[styles.contentWrapper, { padding: 16 }]}>
+          <SkeletonLoadingMobile type="transaction-list" rows={6} />
+        </View>
       </View>
     );
   }

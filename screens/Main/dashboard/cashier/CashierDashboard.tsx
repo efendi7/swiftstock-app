@@ -25,6 +25,7 @@ import { CashierActivity } from './sections/CashierActivity';
 
 // Modal (Gunakan ActivityModal yang sudah mendukung Infinite Scroll)
 import { ActivityModal } from '../admin/modal/ActivityModal'; 
+import SkeletonLoadingMobile from '@components/common/SkeletonLoadingMobile';
 
 const CashierDashboard = () => {
   const insets = useSafeAreaInsets();
@@ -114,15 +115,13 @@ const CashierDashboard = () => {
           />
         }
       >
-        {/* INDICATOR LOADING */}
-        <View style={styles.loadingWrapper}>
-          {loading && !refreshing && (
-            <ActivityIndicator size="small" color={COLORS.secondary} />
-          )}
-        </View>
-
-        <View style={styles.contentWrapper}>
-          {/* GRID STATISTIK */}
+        {loading && !refreshing ? (
+          <View style={{ marginTop: 20 }}>
+            <SkeletonLoadingMobile type="dashboard-card" rows={4} />
+          </View>
+        ) : (
+          <View style={styles.contentWrapper}>
+            /* GRID STATISTIK */
           <CashierStatsGrid
             totalProducts={stats.totalProducts}
             totalOut={stats.totalOut} 
@@ -159,6 +158,7 @@ const CashierDashboard = () => {
             />
           </View>
         </View>
+        )}
 
         <Text style={styles.footerBrand}>Swiftstock by Efendi • 2026</Text>
       </Animated.ScrollView>

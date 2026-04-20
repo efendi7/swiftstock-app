@@ -280,6 +280,20 @@ export class ProductService {
         isNewProduct: true,
       });
 
+      const historyRef = doc(collection(db, 'tenants', tenantId, 'stock_history'));
+      batch.set(historyRef, {
+        productId: productRef.id,
+        productName: strings.name,
+        type: 'IN',
+        beforeStock: 0,
+        afterStock: nums.stock,
+        qtyChange: nums.stock,
+        reason: 'Penambahan Produk Baru',
+        date: serverTimestamp(),
+        userId: getCurrentUserId() || '',
+        userName: getCurrentUserName(),
+      });
+
       const metaSnap = await getDoc(metadataRef);
       if (metaSnap.exists()) {
         batch.update(metadataRef, { totalProducts: increment(1), lastUpdated: serverTimestamp() });
@@ -334,6 +348,20 @@ export class ProductService {
             isNewProduct:  false,
           });
         }
+
+        const historyRef = doc(collection(db, 'tenants', tenantId, 'stock_history'));
+        batch.set(historyRef, {
+          productId,
+          productName: strings.name,
+          type: stockDiff > 0 ? 'IN' : 'OUT',
+          beforeStock: oldData.stock || 0,
+          afterStock: nums.stock,
+          qtyChange: Math.abs(stockDiff),
+          reason: 'Update Manual',
+          date: serverTimestamp(),
+          userId: getCurrentUserId() || '',
+          userName: getCurrentUserName(),
+        });
       }
 
       batch.update(productRef, {

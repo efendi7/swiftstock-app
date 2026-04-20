@@ -12,6 +12,7 @@ import { useAuth }          from '@hooks/auth/useAuth';
 import { SettingsService }  from '@services/settingsService';
 import { DashboardService } from '@services/dashboardService';
 import { PeriodCompareData } from '@components/dashboard/chart/PeriodCompareCard';
+import SkeletonLoading from '@components/common/web/SkeletonLoading';
 
 import { WebStatsRow, StatsComparison }  from './sections/WebStatsRow';
 import { WebDualColumn }                 from './sections/WebDualColumn';
@@ -149,7 +150,15 @@ const AdminDashboardWeb = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ROW 1 — 4 Metrik Utama Dinamis */}
+        {loading && !stats ? (
+          <View style={{ gap: 24 }}>
+            <SkeletonLoading type="card" rows={4} columns={4} />
+            <SkeletonLoading type="table" rows={5} />
+            <SkeletonLoading type="sidebar" />
+          </View>
+        ) : (
+          <>
+            {/* ROW 1 — 4 Metrik Utama Dinamis */}
         <WebStatsRow
           totalRevenue={stats?.totalRevenue           ?? 0}
           totalExpense={stats?.totalExpense           ?? 0}
@@ -192,6 +201,8 @@ const AdminDashboardWeb = () => {
         />
 
         <Text style={styles.footer}>Swiftstock POS Hybrid • SaaS Edition 2026</Text>
+          </>
+        )}
       </ScrollView>
 
       <ActivityModal
@@ -200,7 +211,7 @@ const AdminDashboardWeb = () => {
         currentUserName={currentDisplayName}
       />
 
-      {loading && (
+      {loading && stats && (
         <View style={styles.floatingLoader}>
           <ActivityIndicator size="small" color={COLORS.secondary} />
           <Text style={styles.loaderText}>Memperbarui...</Text>

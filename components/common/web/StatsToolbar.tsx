@@ -1,57 +1,124 @@
 /**
- * components/common/StatsToolbar.tsx
- * Toolbar berisi stat chips + slot tombol aksi kanan.
- * Reusable di ProductScreenWeb, AttendanceManagementWeb, CashierManagementWeb, dll.
- *
- * Cara pakai:
- *   <StatsToolbar
- *     stats={[
- *       { icon: <Package size={14} color={COLORS.primary} />, value: 120, label: 'Total', bg: '...', color: '...' },
- *     ]}
- *     right={<TouchableOpacity ...><Text>Tambah</Text></TouchableOpacity>}
- *   />
+ * StatsToolbar.tsx — Responsive
+ * Desktop/Tablet : ikon + angka + label
+ * Mobile <768px  : ikon + angka saja (label disembunyikan, padding lebih kecil)
  */
+
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useWindowWidth } from '@hooks/useWindowWidth';
 
 export interface StatItem {
-  icon:   React.ReactNode;
-  value:  string | number;
-  label:  string;
-  bg:     string;
-  color:  string;
+  icon:  React.ReactNode;
+  value: number;
+  label: string;
+  bg:    string;
+  color: string;
 }
 
 interface Props {
-  stats:  StatItem[];
-  right?: React.ReactNode;   // tombol aksi di kanan (opsional)
-  extra?: React.ReactNode;   // slot tambahan di tengah (opsional)
+  stats: StatItem[];
+  right?: React.ReactNode;
 }
 
-const StatsToolbar: React.FC<Props> = ({ stats, right, extra }) => (
-  <View style={s.wrap}>
-    <View style={s.left}>
-      {stats.map((st, i) => (
-        <View key={i} style={[s.chip, { backgroundColor: st.bg }]}>
-          {st.icon}
-          <Text style={[s.val, { color: st.color }]}>{st.value}</Text>
-          <Text style={[s.lbl, { color: st.color }]}>{st.label}</Text>
-        </View>
-      ))}
-      {extra}
-    </View>
-    {right && <View style={s.right}>{right}</View>}
-  </View>
-);
+const BP_MOBILE = 768;
 
-const s = StyleSheet.create({
-  wrap:  { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 11, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0', gap: 12 },
-  left:  { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' as any, flex: 1 },
-  right: { flexShrink: 0 },
-  chip:  { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 },
-  val:   { fontSize: 13, fontFamily: 'PoppinsBold' },
-  lbl:   { fontSize: 11, fontFamily: 'PoppinsRegular' },
+const StatsToolbar: React.FC<Props> = ({ stats, right }) => {
+  const windowWidth = useWindowWidth();
+  const isMobile    = windowWidth < BP_MOBILE;
+
+  return (
+    <View style={[styles.container, isMobile && styles.containerMobile]}>
+
+      {/* STAT CHIPS */}
+      <View style={styles.statsRow}>
+        {stats.map((stat, i) => (
+          <View
+            key={i}
+            style={[
+              styles.chip,
+              { backgroundColor: stat.bg },
+              isMobile && styles.chipMobile,
+            ]}
+          >
+            {/* Ikon */}
+            <View style={styles.iconWrap}>{stat.icon}</View>
+
+            {/* Angka */}
+            <Text style={[styles.value, { color: stat.color }]}>
+              {stat.value}
+            </Text>
+
+            {/* Label — disembunyikan di mobile */}
+            {!isMobile && (
+              <Text style={[styles.label, { color: stat.color }]}>
+                {stat.label}
+              </Text>
+            )}
+          </View>
+        ))}
+      </View>
+
+      {/* SLOT KANAN (tombol tambah, filter, dll) */}
+      {right && <View style={styles.rightSlot}>{right}</View>}
+
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    backgroundColor: '#FFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 10,
+  },
+  containerMobile: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'nowrap' as any,
+    flexShrink: 1,
+    minWidth: 0,
+  },
+
+  chip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 9,
+  },
+  chipMobile: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    gap: 4,
+  },
+
+  iconWrap: { flexShrink: 0 },
+
+  value: {
+    fontSize: 14,
+    fontFamily: 'PoppinsBold',
+  },
+  label: {
+    fontSize: 12,
+    fontFamily: 'PoppinsRegular',
+    opacity: 0.8,
+  },
+
+  rightSlot: { flexShrink: 0 },
 });
 
 export default StatsToolbar;
-export type { Props as StatsToolbarProps };

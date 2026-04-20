@@ -1,7 +1,8 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import {
-  View, Text, StyleSheet, Animated, StatusBar, ActivityIndicator, RefreshControl, Platform
+  View, Text, StyleSheet, Animated, StatusBar, RefreshControl, Platform, TouchableOpacity, Alert
 } from 'react-native';
+import { Users, Package, Crown, FileText } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { COLORS } from '@constants/colors';
@@ -15,6 +16,7 @@ import { DateRangeSelector } from '@components/dashboard/DateRangeSelector';
 import { AdminSalesRanking, AdminStockRanking } from './sections/AdminRankings';
 import { AdminActivity } from './sections/AdminActivity';
 import { ActivityModal } from './modal/ActivityModal';
+import SkeletonLoadingMobile from '@components/common/SkeletonLoadingMobile';
 
 const AdminDashboard = () => {
   const insets = useSafeAreaInsets();
@@ -124,14 +126,46 @@ const AdminDashboard = () => {
           onSelectPreset={setPresetRange}
         />
 
-        {/* Loading Indicator yang tidak mengganggu layout */}
-        <View style={styles.loadingWrapper}>
-          {loading && !refreshing && (
-            <ActivityIndicator size="small" color={COLORS.secondary} />
-          )}
+        {/* Quick Actions Shortcuts */}
+        <View style={styles.quickActionsContainer}>
+          <Text style={styles.sectionTitle}>Pintasan Cepat</Text>
+          <View style={styles.quickActionsGrid}>
+            <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('CashierManagement')}>
+              <View style={[styles.iconWrap, { backgroundColor: '#EFF6FF' }]}>
+                <Users size={24} color="#3B82F6" />
+              </View>
+              <Text style={styles.actionText}>Kasir & Pegawai</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('Product')}>
+              <View style={[styles.iconWrap, { backgroundColor: '#F0FDF4' }]}>
+                <Package size={24} color="#10B981" />
+              </View>
+              <Text style={styles.actionText}>Produk & Stok</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => Alert.alert('Segera Hadir', 'Fitur Manajemen Member sedang dalam tahap pengembangan.')}>
+              <View style={[styles.iconWrap, { backgroundColor: '#FEF2F2' }]}>
+                <Crown size={24} color="#EF4444" />
+              </View>
+              <Text style={styles.actionText}>Daftar Member</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.actionCard} onPress={() => Alert.alert('Segera Hadir', 'Fitur Laporan Stok sedang dalam tahap pengembangan.')}>
+              <View style={[styles.iconWrap, { backgroundColor: '#FFFBEB' }]}>
+                <FileText size={24} color="#F59E0B" />
+              </View>
+              <Text style={styles.actionText}>Laporan Stok</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <View style={[styles.contentWrapper, { opacity: loading && !refreshing ? 0.6 : 1 }]}>
+        {loading && !refreshing ? (
+          <View style={{ marginTop: 20 }}>
+            <SkeletonLoadingMobile type="dashboard-card" rows={4} />
+          </View>
+        ) : (
+          <View style={[styles.contentWrapper, { opacity: loading && !refreshing ? 0.6 : 1 }]}>
           <AdminStatsGrid
             totalProducts={stats?.totalProducts || 0}
             totalIn={stats?.totalIn || 0}
@@ -172,6 +206,7 @@ const AdminDashboard = () => {
             />
           </View>
         </View>
+        )}
 
         <Text style={styles.footerBrand}>Swiftstock POS Hybrid • 2026</Text>
       </Animated.ScrollView>
@@ -193,11 +228,31 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
   },
-  loadingWrapper: {
-    height: 20,
+  sectionTitle: { fontSize: 16, fontFamily: 'PoppinsBold', color: '#1E293B', marginBottom: 12 },
+  quickActionsContainer: { marginTop: 16, marginBottom: 8 },
+  quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' },
+  actionCard: {
+    width: '48%',
+    backgroundColor: '#FFF',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    alignItems: 'center',
+    gap: 12,
+  },
+  iconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 10,
+  },
+  actionText: {
+    fontSize: 13,
+    fontFamily: 'PoppinsSemiBold',
+    color: '#334155',
+    textAlign: 'center',
   },
   contentWrapper: {
     minHeight: 400,

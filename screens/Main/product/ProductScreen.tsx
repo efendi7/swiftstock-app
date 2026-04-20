@@ -12,6 +12,7 @@ import { useAuth } from '../../../hooks/auth/useAuth';
 import { ScreenHeader } from '../../../components/common/ScreenHeader';
 import FilterSection from '../../../components/products/FilterSection';
 import ProductList from '../../../components/products/ProductList';
+import SkeletonLoadingMobile from '../../../components/common/SkeletonLoadingMobile';
 import EditProductModal from './modal/EditProductModal';
 import { Product } from '../../../types/product.types';
 import { ProductService } from '../../../services/productService';
@@ -139,10 +140,19 @@ const ProductScreen = ({ navigation, route }: any) => {
 
   if ((loading || authLoading) && products.length === 0) {
     return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color={COLORS.secondary} />
-        <Text style={styles.loaderText}>Menghubungkan ke Toko...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+        <ScreenHeader
+          title="Daftar Produk"
+          subtitle={user?.storeName || 'Manajemen Stok'}
+          icon={<Package size={24} color="#FFF" />}
+        />
+        <View style={styles.contentWrapper}>
+          <View style={{ padding: 16 }}>
+            <SkeletonLoadingMobile type="product-list" rows={6} />
+          </View>
+        </View>
+      </SafeAreaView>
     );
   }
 

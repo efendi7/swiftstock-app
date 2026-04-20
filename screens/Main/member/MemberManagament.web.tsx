@@ -16,6 +16,7 @@ import MemberListWeb   from '@components/member/MemberListWeb';
 import AddMemberModal  from './modal/AddMemberModal';
 import EditMemberModal from './modal/EditMemberModal';
 import MemberDetailModal from './modal/MemberDetailModal';
+import SkeletonLoading from '@components/common/web/SkeletonLoading';
 
 const PAGE_SIZE = 20;
 
@@ -223,7 +224,7 @@ const MemberManagementWeb = () => {
             showsVerticalScrollIndicator={false}
           >
             {loading || pageLoading ? (
-              <ActivityIndicator size="large" color={COLORS.secondary} style={{ marginTop: 80 }} />
+               <SkeletonLoading type="table" rows={PAGE_SIZE} style={{ padding: 18 }} />
             ) : (
               <MemberListWeb
                 data={filteredMembers}

@@ -4,8 +4,11 @@ export type LogoShape    = 'square' | 'portrait' | 'landscape';
 export type LogoPosition = 'left' | 'right' | 'top' | 'bottom';
 export type LogoAlign    = 'flex-start' | 'center' | 'flex-end';
 
+export type BusinessType = 'retail' | 'fnb' | 'services';
+
 export interface StoreProfile {
   storeName:    string;
+  businessType?: BusinessType;
   ownerName:    string;
   address:      string;
   phone:        string;

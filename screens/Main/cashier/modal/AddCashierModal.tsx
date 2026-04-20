@@ -5,42 +5,274 @@ import {
   Modal,
   TouchableOpacity,
   Text,
-  ScrollView,
-  Platform,
   ActivityIndicator,
   Animated,
-  Dimensions,
   Pressable,
+  Clipboard,
 } from 'react-native';
-import { X, Users, Mail, Lock, User as UserIcon, CheckCircle, AlertCircle } from 'lucide-react-native';
+import {
+  X, Users, Mail, Lock, User as UserIcon,
+  CheckCircle, AlertCircle, Info, Copy,
+  RefreshCw, ShieldCheck, Receipt,
+} from 'lucide-react-native';
 
 import { COLORS } from '@constants/colors';
 import { CashierService } from '@services/cashierService';
 import FloatingLabelInput from '@components/FloatingLabelInput';
 
-const { width } = Dimensions.get('window');
-const DRAWER_WIDTH = Platform.OS === 'web' ? Math.min(520, width * 0.35) : width * 0.92;
-
 type ToastType = 'success' | 'error' | null;
 
-export const AddCashierModal = ({ visible, onClose, onSuccess, tenantId, storeName }: any) => {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+// ── Password generator ─────────────────────────────────────────────────
+const CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#!';
+const generatePassword = () =>
+  Array.from({ length: 10 }, () => CHARS[Math.floor(Math.random() * CHARS.length)]).join('');
 
+// ── Password strength ──────────────────────────────────────────────────
+const getStrength = (pw: string) => {
+  if (!pw) return { score: 0, label: '', color: '#E2E8F0' };
+  let score = 0;
+  if (pw.length >= 6)         score++;
+  if (pw.length >= 10)        score++;
+  if (/[A-Z]/.test(pw))      score++;
+  if (/[0-9]/.test(pw))      score++;
+  if (/[@#!$%^&*]/.test(pw)) score++;
+  const map = [
+    { label: '',            color: '#E2E8F0' },
+    { label: 'Sangat Lemah', color: '#EF4444' },
+    { label: 'Lemah',        color: '#F97316' },
+    { label: 'Sedang',       color: '#F59E0B' },
+    { label: 'Kuat',         color: '#10B981' },
+    { label: 'Sangat Kuat',  color: '#059669' },
+  ];
+  return { score, ...map[Math.min(score, 5)] };
+};
+
+// ── Shared helpers ─────────────────────────────────────────────────────
+const Sep      = () => <View style={s.sep} />;
+const DashLine = () => <View style={s.dashLine} />;
+
+const InfoRow = ({
+  label, value, icon, valueColor,
+}: {
+  label: string; value: string; icon?: React.ReactNode; valueColor?: string;
+}) => (
+  <View style={s.infoRow}>
+    <View style={s.infoLabelWrap}>
+      {icon && <View style={{ marginRight: 5 }}>{icon}</View>}
+      <Text style={s.infoLabel}>{label}</Text>
+    </View>
+    <Text style={[s.infoValue, valueColor ? { color: valueColor } : {}]} numberOfLines={2}>
+      {value}
+    </Text>
+  </View>
+);
+
+// ── Left col: form ─────────────────────────────────────────────────────
+const FormColumn = ({
+  name, setName, email, setEmail, password, setPassword,
+  themeColor, onGenerate,
+}: any) => {
+  const strength = getStrength(password);
+  return (
+    <View style={s.formCol}>
+      <View style={s.colHeader}>
+        <Users size={13} color={themeColor} />
+        <Text style={[s.colTitle, { color: themeColor }]}>Data Kasir</Text>
+      </View>
+      <DashLine />
+
+      <View style={s.inputGroup}>
+        <FloatingLabelInput
+          label="Nama Lengkap"
+          value={name}
+          onChangeText={setName}
+          icon={<UserIcon size={16} color="#94A3B8" />}
+          placeholder="Cth: Budi Santoso"
+        />
+      </View>
+
+      <View style={s.inputGroup}>
+        <FloatingLabelInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          icon={<Mail size={16} color="#94A3B8" />}
+          keyboardType="email-address"
+          autoCapitalize="none"
+          placeholder="Cth: budi@toko.com"
+        />
+      </View>
+
+      <View style={s.inputGroup}>
+        <FloatingLabelInput
+          label="Password Sementara"
+          value={password}
+          onChangeText={setPassword}
+          isPassword
+          icon={<Lock size={16} color="#94A3B8" />}
+          placeholder="Min. 6 karakter"
+        />
+        <TouchableOpacity style={s.genBtn} onPress={onGenerate} activeOpacity={0.7}>
+          <RefreshCw size={12} color={themeColor} />
+          <Text style={[s.genText, { color: themeColor }]}>Generate otomatis</Text>
+        </TouchableOpacity>
+      </View>
+
+      {password.length > 0 && (
+        <View style={s.strengthWrap}>
+          <View style={s.strengthBars}>
+            {[1,2,3,4,5].map(i => (
+              <View
+                key={i}
+                style={[s.strengthBar, { backgroundColor: i <= strength.score ? strength.color : '#E2E8F0' }]}
+              />
+            ))}
+          </View>
+          <Text style={[s.strengthLabel, { color: strength.color }]}>{strength.label}</Text>
+        </View>
+      )}
+
+      <View style={{ flex: 1 }} />
+    </View>
+  );
+};
+
+// ── Left col: credential card (post-success) ───────────────────────────
+const CredentialCard = ({
+  name, email, password, themeColor,
+}: {
+  name: string; email: string; password: string; themeColor: string;
+}) => {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = () => {
+    Clipboard.setString(
+      `Akun Kasir\nNama: ${name}\nEmail: ${email}\nPassword: ${password}\n\nSilakan login dan ganti password Anda.`
+    );
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <View style={s.formCol}>
+      <View style={s.colHeader}>
+        <CheckCircle size={13} color="#10B981" />
+        <Text style={[s.colTitle, { color: '#10B981' }]}>Akun Berhasil Dibuat</Text>
+      </View>
+      <DashLine />
+
+      <InfoRow label="Nama"     value={name}  />
+      <Sep />
+      <InfoRow label="Email"    value={email} />
+      <Sep />
+      <InfoRow label="Password" value={password} valueColor={themeColor} />
+
+      <DashLine />
+
+      <TouchableOpacity
+        style={[s.copyBtn, { borderColor: themeColor + '50' }]}
+        onPress={handleCopy}
+        activeOpacity={0.8}
+      >
+        {copied
+          ? <CheckCircle size={14} color="#10B981" />
+          : <Copy size={14} color={themeColor} />}
+        <Text style={[s.copyText, { color: copied ? '#10B981' : themeColor }]}>
+          {copied ? 'Tersalin!' : 'Salin Kredensial'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={s.credNote}>Minta kasir ganti password setelah login pertama.</Text>
+      <View style={{ flex: 1 }} />
+    </View>
+  );
+};
+
+// ── Right col: tips & info ─────────────────────────────────────────────
+const InfoColumn = ({ themeColor, storeName }: { themeColor: string; storeName: string }) => (
+  <View style={s.infoCol}>
+
+    <View style={s.block}>
+      <View style={s.blockHeader}>
+        <Info size={13} color={themeColor} />
+        <Text style={s.blockTitle}>Cara Kerja Akun</Text>
+      </View>
+      {[
+        { step: '1', text: 'Buat akun dengan email & password sementara.' },
+        { step: '2', text: 'Bagikan kredensial ke kasir.' },
+        { step: '3', text: 'Kasir login & ganti password sendiri.' },
+        { step: '4', text: 'Akun aktif & siap dipakai.' },
+      ].map((item, idx, arr) => (
+        <View key={item.step}>
+          <View style={s.stepRow}>
+            <View style={[s.stepBadge, { backgroundColor: themeColor }]}>
+              <Text style={s.stepNum}>{item.step}</Text>
+            </View>
+            <Text style={s.stepText}>{item.text}</Text>
+          </View>
+          {idx < arr.length - 1 && (
+            <View style={[s.stepConnector, { borderColor: themeColor + '35' }]} />
+          )}
+        </View>
+      ))}
+    </View>
+
+    <View style={s.block}>
+      <View style={s.blockHeader}>
+        <ShieldCheck size={13} color={themeColor} />
+        <Text style={s.blockTitle}>Tips Password</Text>
+      </View>
+      {[
+        'Min. 8 karakter',
+        'Huruf besar & kecil',
+        'Tambahkan angka / simbol',
+        'Hindari nama / tanggal lahir',
+      ].map(tip => (
+        <View key={tip} style={s.tipRow}>
+          <View style={[s.dot, { backgroundColor: themeColor }]} />
+          <Text style={s.tipText}>{tip}</Text>
+        </View>
+      ))}
+    </View>
+
+    <View style={s.block}>
+      <View style={s.blockHeader}>
+        <Receipt size={13} color={themeColor} />
+        <Text style={s.blockTitle}>Info Toko</Text>
+      </View>
+      <InfoRow
+        label="Toko"
+        value={storeName || '–'}
+        icon={<Receipt size={12} color="#94A3B8" />}
+      />
+    </View>
+
+    <View style={{ flex: 1 }} />
+  </View>
+);
+
+// ── Main Modal ─────────────────────────────────────────────────────────
+export const AddCashierModal = ({
+  visible, onClose, onSuccess, tenantId, storeName, themeColor,
+}: any) => {
+  const color = themeColor || COLORS.primary;
+
+  const [name,        setName]        = useState('');
+  const [email,       setEmail]       = useState('');
+  const [password,    setPassword]    = useState('');
+  const [loading,     setLoading]     = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [savedCreds,  setSavedCreds]  = useState({ name: '', email: '', password: '' });
   const [toast, setToast] = useState<{ type: ToastType; message: string }>({ type: null, message: '' });
-  const toastAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(DRAWER_WIDTH)).current;
+
+  const toastAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim   = useRef(new Animated.Value(0.97)).current;
 
   useEffect(() => {
     if (visible) {
-      slideAnim.setValue(DRAWER_WIDTH);
-      opacityAnim.setValue(0);
       Animated.parallel([
-        Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 65, friction: 11 }),
-        Animated.timing(opacityAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+        Animated.timing(opacityAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+        Animated.spring(scaleAnim,   { toValue: 1, friction: 8, tension: 100, useNativeDriver: true }),
       ]).start();
     }
   }, [visible]);
@@ -49,7 +281,7 @@ export const AddCashierModal = ({ visible, onClose, onSuccess, tenantId, storeNa
     setToast({ type, message });
     toastAnim.setValue(0);
     Animated.sequence([
-      Animated.spring(toastAnim, { toValue: 1, useNativeDriver: true, tension: 80, friction: 10 }),
+      Animated.spring(toastAnim, { toValue: 1, useNativeDriver: true, friction: 7 }),
       Animated.delay(2500),
       Animated.timing(toastAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
     ]).start(() => setToast({ type: null, message: '' }));
@@ -57,22 +289,23 @@ export const AddCashierModal = ({ visible, onClose, onSuccess, tenantId, storeNa
 
   const handleClose = () => {
     Animated.parallel([
-      Animated.timing(slideAnim, { toValue: DRAWER_WIDTH, duration: 250, useNativeDriver: true }),
-      Animated.timing(opacityAnim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      Animated.timing(opacityAnim, { toValue: 0, duration: 160, useNativeDriver: true }),
+      Animated.timing(scaleAnim,   { toValue: 0.97, duration: 160, useNativeDriver: true }),
     ]).start(() => {
-      setName('');
-      setEmail('');
-      setPassword('');
+      setName(''); setEmail(''); setPassword('');
+      setShowSuccess(false);
+      setSavedCreds({ name: '', email: '', password: '' });
       onClose();
     });
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { showToast('error', 'Nama kasir tidak boleh kosong'); return; }
-    if (!email.trim()) { showToast('error', 'Email tidak boleh kosong'); return; }
-    if (!password) { showToast('error', 'Password tidak boleh kosong'); return; }
-    if (password.length < 6) { showToast('error', 'Password minimal 6 karakter'); return; }
-    if (!tenantId) { showToast('error', 'Sesi tidak valid, silakan login ulang'); return; }
+    if (!name.trim())                  return showToast('error', 'Nama kasir tidak boleh kosong');
+    if (!email.trim())                 return showToast('error', 'Email tidak boleh kosong');
+    if (!/\S+@\S+\.\S+/.test(email))  return showToast('error', 'Format email tidak valid');
+    if (!password)                     return showToast('error', 'Password tidak boleh kosong');
+    if (password.length < 6)           return showToast('error', 'Password minimal 6 karakter');
+    if (!tenantId)                     return showToast('error', 'Sesi tidak valid');
 
     try {
       setLoading(true);
@@ -83,305 +316,277 @@ export const AddCashierModal = ({ visible, onClose, onSuccess, tenantId, storeNa
         tenantId,
         storeName: storeName || '',
       });
-
-      showToast('success', `Kasir "${name.trim()}" berhasil ditambahkan!`);
+      setSavedCreds({ name: name.trim(), email: email.trim().toLowerCase(), password });
       onSuccess();
-      setTimeout(() => handleClose(), 1800);
-    } catch (error: any) {
-      showToast('error', error.message || 'Terjadi kesalahan. Coba lagi.');
+      setShowSuccess(true);
+    } catch (e: any) {
+      showToast('error', e.message || 'Terjadi kesalahan');
     } finally {
       setLoading(false);
     }
   };
 
-  // Indikator kekuatan password
-  const passwordStrength = password.length === 0 ? 0 : password.length < 6 ? 1 : password.length < 10 ? 2 : 3;
-  const strengthColor = ['#E2E8F0', '#EF4444', '#F59E0B', '#10B981'];
-  const strengthLabel = ['', 'Lemah', 'Sedang', 'Kuat'];
-
   if (!visible) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
-      <View style={styles.modalOverlay}>
-        <Pressable onPress={handleClose} style={StyleSheet.absoluteFillObject}>
-          <Animated.View style={[styles.backdrop, { opacity: opacityAnim }]} />
+    <Modal transparent visible={visible} animationType="none" onRequestClose={handleClose}>
+      <View style={[s.overlay, s.overlayCenter]}>
+
+        <Pressable style={StyleSheet.absoluteFillObject} onPress={handleClose}>
+          <Animated.View style={[s.backdrop, { opacity: opacityAnim }]} />
         </Pressable>
 
         <Animated.View
-          style={[
-            styles.drawerContainer,
-            { width: DRAWER_WIDTH, transform: [{ translateX: slideAnim }] },
-          ]}
+          style={[s.container, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
         >
-          {/* Toast Notification — mengganti Alert.alert */}
+          {/* Toast */}
           {toast.type && (
             <Animated.View
               style={[
-                styles.toast,
-                toast.type === 'success' ? styles.toastSuccess : styles.toastError,
+                s.toast,
                 {
                   opacity: toastAnim,
+                  borderLeftColor: toast.type === 'success' ? '#10B981' : '#EF4444',
                   transform: [{
-                    translateY: toastAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }),
+                    translateY: toastAnim.interpolate({ inputRange: [0,1], outputRange: [-14, 0] }),
                   }],
                 },
               ]}
             >
               {toast.type === 'success'
-                ? <CheckCircle size={16} color="#10B981" />
-                : <AlertCircle size={16} color="#EF4444" />
-              }
-              <Text style={[styles.toastText, { color: toast.type === 'success' ? '#065F46' : '#7F1D1D' }]}>
-                {toast.message}
-              </Text>
+                ? <CheckCircle size={15} color="#10B981" />
+                : <AlertCircle size={15} color="#EF4444" />}
+              <Text style={s.toastText}>{toast.message}</Text>
             </Animated.View>
           )}
 
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.headerLeft}>
-              <View style={styles.iconBox}>
-                <Users size={22} color={COLORS.primary} />
+          {/* Header — dark themeColor bg, mirrors AddProductModal */}
+          <View style={[s.header, { backgroundColor: color }]}>
+            <View style={s.headerLeft}>
+              <View style={s.headerIcon}>
+                <Users size={18} color="#FFF" />
               </View>
               <View>
-                <Text style={styles.headerTitle}>Tambah Kasir</Text>
-                <Text style={styles.headerSubtitle}>{storeName || 'Pengaturan Toko'}</Text>
+                <Text style={s.headerSub}>{storeName || 'Manajemen Kasir'}</Text>
+                <Text style={s.headerTitle}>Tambah Kasir Baru</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={handleClose} style={styles.closeButton} disabled={loading}>
-              <X size={18} color="#64748B" />
+            <TouchableOpacity onPress={handleClose} style={s.closeBtn} hitSlop={8}>
+              <X size={18} color="#FFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Section Label */}
-          <View style={styles.sectionLabel}>
-            <Text style={styles.sectionLabelText}>INFORMASI AKUN</Text>
+          {/* 2-column body — fixed height, nothing overflows screen */}
+          <View style={s.body}>
+            {showSuccess
+              ? <CredentialCard
+                  name={savedCreds.name}
+                  email={savedCreds.email}
+                  password={savedCreds.password}
+                  themeColor={color}
+                />
+              : <FormColumn
+                  name={name}        setName={setName}
+                  email={email}      setEmail={setEmail}
+                  password={password} setPassword={setPassword}
+                  themeColor={color}
+                  onGenerate={() => setPassword(generatePassword())}
+                />
+            }
+            <View style={s.colDivider} />
+            <InfoColumn themeColor={color} storeName={storeName || ''} />
           </View>
 
-          {/* Body */}
-          <ScrollView
-            style={styles.scrollView}
-            contentContainerStyle={styles.scrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <FloatingLabelInput
-              label="Nama Lengkap Kasir"
-              value={name}
-              onChangeText={setName}
-              icon={<UserIcon size={18} color="#94A3B8" />}
-            />
-
-            <FloatingLabelInput
-              label="Email Login"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              icon={<Mail size={18} color="#94A3B8" />}
-            />
-
-            <FloatingLabelInput
-              label="Password Akun"
-              value={password}
-              onChangeText={setPassword}
-              isPassword={true}
-              icon={<Lock size={18} color="#94A3B8" />}
-            />
-
-            {/* Indikator kekuatan password */}
-            {password.length > 0 && (
-              <View style={styles.strengthContainer}>
-                <View style={styles.strengthBars}>
-                  {[1, 2, 3].map(i => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.strengthBar,
-                        { backgroundColor: i <= passwordStrength ? strengthColor[passwordStrength] : '#E2E8F0' },
-                      ]}
-                    />
-                  ))}
-                </View>
-                <Text style={[styles.strengthText, { color: strengthColor[passwordStrength] }]}>
-                  {strengthLabel[passwordStrength]}
-                </Text>
+          {/* Footer — themeColor fill, buttons match AddProductModal */}
+          <View style={[s.footer, { backgroundColor: color }]}>
+            {showSuccess ? (
+              <View style={s.footerRow}>
+                <TouchableOpacity onPress={handleClose} style={s.footerBtnFull}>
+                  <CheckCircle size={14} color="#fff" />
+                  <Text style={s.footerBtnText}>Selesai</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={s.footerRow}>
+                <TouchableOpacity onPress={handleClose} style={s.footerBtnCancel}>
+                  <Text style={s.footerCancelText}>Batal</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSave}
+                  style={[s.footerBtnSave, loading && { opacity: 0.5 }]}
+                  disabled={loading}
+                >
+                  {loading
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <>
+                        <Users size={15} color="#fff" />
+                        <Text style={s.footerBtnText}>Buat Akun Kasir</Text>
+                      </>
+                  }
+                </TouchableOpacity>
               </View>
             )}
-
-            {/* Info box */}
-            <View style={styles.infoBox}>
-              <View style={styles.infoIcon}>
-                <Text style={styles.infoIconText}>ℹ</Text>
-              </View>
-              <Text style={styles.infoText}>
-                Kasir akan menggunakan email dan password ini untuk login di aplikasi SwiftStock Mobile.
-              </Text>
-            </View>
-          </ScrollView>
-
-          {/* Footer */}
-          <View style={styles.footer}>
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleClose} disabled={loading}>
-              <Text style={styles.cancelBtnText}>Batal</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.saveBtn, loading && styles.saveBtnDisabled]}
-              onPress={handleSave}
-              disabled={loading}
-            >
-              {loading ? (
-                <View style={styles.loadingRow}>
-                  <ActivityIndicator color="#fff" size="small" />
-                  <Text style={styles.saveBtnText}>Menyimpan...</Text>
-                </View>
-              ) : (
-                <Text style={styles.saveBtnText}>Simpan Kasir</Text>
-              )}
-            </TouchableOpacity>
           </View>
+
         </Animated.View>
       </View>
     </Modal>
   );
 };
 
-const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, flexDirection: 'row', justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15, 23, 42, 0.5)' },
+// ── Styles ─────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
+  overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
+  overlayCenter: { justifyContent: 'center', alignItems: 'center' },
+  backdrop:      { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.35)' },
 
-  drawerContainer: {
-    height: '100%',
-    backgroundColor: '#F8FAFC',
+  container: {
+    width: 820,
+    maxWidth: '95%' as any,
+    maxHeight: '88%' as any,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#FFF',
+    elevation: 24,
     shadowColor: '#000',
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
     shadowRadius: 24,
-    elevation: 20,
   },
+
+  // Header — dark themeColor bg, mirrors AddProductModal
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  headerIcon: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 15, fontFamily: 'PoppinsBold', color: '#FFF', marginTop: 1 },
+  headerMeta:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
+  headerSub:   { fontSize: 10, fontFamily: 'PoppinsMedium', color: 'rgba(255,255,255,0.7)', textTransform: 'uppercase' as any, letterSpacing: 0.5 },
+  closeBtn: {
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  badge:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20, borderWidth: 1 },
+  badgeText: { fontSize: 11, fontFamily: 'PoppinsBold' },
+
+  // 2-col body — fixed height so nothing overflows
+  body: {
+    flexDirection: 'row',
+    height: 400,
+    overflow: 'hidden' as any,
+  },
+  colDivider: { width: 1, backgroundColor: '#F1F5F9' },
+
+  // Left col
+  formCol: { flex: 1, padding: 18, flexDirection: 'column' },
+  colHeader: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 10 },
+  colTitle:  { fontSize: 13, fontFamily: 'PoppinsBold', flex: 1 },
+
+  inputGroup: { marginBottom: 12 },
+
+  genBtn:  { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 5 },
+  genText: { fontSize: 12, fontFamily: 'PoppinsMedium' },
+
+  strengthWrap:  { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 6 },
+  strengthBars:  { flexDirection: 'row', gap: 3, flex: 1 },
+  strengthBar:   { flex: 1, height: 3, borderRadius: 2 },
+  strengthLabel: { fontSize: 11, fontFamily: 'PoppinsBold', minWidth: 72, textAlign: 'right' as any },
+
+  copyBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 7, borderRadius: 10, padding: 10,
+    borderWidth: 1, backgroundColor: '#F8FAFC', marginBottom: 8,
+  },
+  copyText:  { fontSize: 13, fontFamily: 'PoppinsMedium' },
+  credNote:  { fontSize: 11, fontFamily: 'PoppinsRegular', color: '#94A3B8', textAlign: 'center' as any, lineHeight: 16 },
+
+  // Right col — light bg, same as TransactionModal RightColumn
+  infoCol: {
+    width: 230,
+    padding: 14,
+    flexDirection: 'column',
+    backgroundColor: '#FAFBFC',
+  },
+
+  // Block
+  block: {
+    backgroundColor: '#F8FAFC', borderRadius: 12,
+    padding: 10, borderWidth: 1, borderColor: '#F1F5F9',
+    marginBottom: 10,
+  },
+  blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
+  blockTitle:  { fontSize: 12, fontFamily: 'PoppinsBold', color: '#1E293B', flex: 1 },
+
+  // Step flow
+  stepRow:      { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  stepBadge:    { width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
+  stepNum:      { fontSize: 10, fontFamily: 'PoppinsBold', color: '#fff' },
+  stepText:     { fontSize: 11.5, fontFamily: 'PoppinsRegular', color: '#475569', flex: 1, lineHeight: 17 },
+  stepConnector:{ width: 1, height: 7, borderLeftWidth: 1, borderStyle: 'dashed' as any, marginLeft: 8, marginVertical: 1 },
+
+  // Tip rows
+  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 2 },
+  dot:    { width: 5, height: 5, borderRadius: 3 },
+  tipText:{ fontSize: 11.5, fontFamily: 'PoppinsRegular', color: '#64748B' },
+
+  // InfoRow — identical to TransactionModal
+  infoRow:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 5 },
+  infoLabelWrap:{ flexDirection: 'row', alignItems: 'center' },
+  infoLabel:    { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#64748B' },
+  infoValue:    { fontSize: 12, fontFamily: 'PoppinsSemiBold', color: '#1E293B', textAlign: 'right' as any, flex: 1, marginLeft: 8 },
+
+  // Sep / dash
+  sep:     { height: 1, backgroundColor: '#E2E8F0' },
+  dashLine:{ borderBottomWidth: 1, borderStyle: 'dashed' as any, borderColor: '#CBD5E1', marginVertical: 8 },
 
   // Toast
   toast: {
     position: 'absolute',
-    top: 16,
-    left: 16,
-    right: 16,
-    zIndex: 100,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    top: 62, left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    padding: 10, backgroundColor: '#fff', borderRadius: 10,
+    elevation: 10, zIndex: 99, borderLeftWidth: 3,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1, shadowRadius: 6,
   },
-  toastSuccess: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
-  toastError: { backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA' },
-  toastText: { fontSize: 13, fontFamily: 'PoppinsMedium', flex: 1 },
+  toastText: { fontSize: 12, fontFamily: 'PoppinsRegular', color: '#334155', flex: 1 },
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 20,
-    backgroundColor: '#fff',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(28, 58, 90, 0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: { fontSize: 18, fontFamily: 'MontserratBold', color: '#0F172A' },
-  headerSubtitle: { fontSize: 12, color: '#94A3B8', fontFamily: 'PoppinsRegular', marginTop: 1 },
-  closeButton: {
-    width: 36, height: 36, borderRadius: 10,
-    backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center',
-  },
-
-  // Section label
-  sectionLabel: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 8 },
-  sectionLabelText: {
-    fontSize: 10,
-    fontFamily: 'PoppinsSemiBold',
-    color: '#94A3B8',
-    letterSpacing: 1.2,
-  },
-
-  // Scroll
-  scrollView: { flex: 1 },
-  scrollContent: { paddingHorizontal: 24, paddingBottom: 24, gap: 4 },
-
-  // Password strength
-  strengthContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  strengthBars: { flexDirection: 'row', gap: 4, flex: 1 },
-  strengthBar: { flex: 1, height: 3, borderRadius: 2 },
-  strengthText: { fontSize: 11, fontFamily: 'PoppinsMedium', minWidth: 42, textAlign: 'right' },
-
-  // Info box
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: '#EFF6FF',
-    padding: 14,
-    borderRadius: 10,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-  },
-  infoIcon: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#3B82F6',
-    justifyContent: 'center', alignItems: 'center',
-    marginTop: 1,
-  },
-  infoIconText: { color: '#fff', fontSize: 11, fontFamily: 'PoppinsBold' },
-  infoText: {
-    flex: 1, fontSize: 12, color: '#1E40AF',
-    fontFamily: 'PoppinsRegular', lineHeight: 18,
-  },
-
-  // Footer
+  // Footer — themeColor fill, buttons mirror AddProductModal
   footer: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 20,
-    backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     borderTopWidth: 1,
-    borderTopColor: '#F1F5F9',
+    borderTopColor: 'rgba(0,0,0,0.06)',
   },
-  cancelBtn: {
-    flex: 1, height: 48, borderRadius: 12, borderWidth: 1.5,
-    borderColor: '#E2E8F0', justifyContent: 'center', alignItems: 'center',
+  footerRow:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+  footerBtnCancel: {
+    paddingHorizontal: 18, paddingVertical: 9,
+    borderRadius: 10, borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  cancelBtnText: { color: '#64748B', fontFamily: 'PoppinsSemiBold', fontSize: 14 },
-  saveBtn: {
-    flex: 2, height: 48, borderRadius: 12,
-    backgroundColor: COLORS.primary, justifyContent: 'center', alignItems: 'center',
+  footerCancelText: { fontSize: 13, fontFamily: 'PoppinsSemiBold', color: 'rgba(255,255,255,0.85)' },
+  footerBtnSave: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 18, paddingVertical: 9, gap: 7,
+    borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  saveBtnDisabled: { opacity: 0.65 },
-  loadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  saveBtnText: { color: '#fff', fontFamily: 'PoppinsBold', fontSize: 14 },
+  footerBtnFull: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 18, paddingVertical: 9, gap: 7,
+    borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  footerBtnText: { fontSize: 13, fontFamily: 'PoppinsBold', color: '#fff' },
 });
 
 export default AddCashierModal;

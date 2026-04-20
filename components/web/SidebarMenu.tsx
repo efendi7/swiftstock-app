@@ -9,7 +9,7 @@ import { UserRole } from '@navigation/types';
 import {
   LayoutDashboard, Package, ShoppingCart, Users,
   Settings, LogOut, Store, BarChart3, CreditCard, Crown,
-  CalendarCheck,
+  CalendarCheck, FileText
 } from 'lucide-react-native';
 import { auth } from '@services/firebaseConfig';
 import { SettingsService } from '@services/settingsService';
@@ -71,6 +71,7 @@ const SidebarMenu: React.FC<Props> = ({ role, tenantId, collapsed = false }) => 
     { icon: ShoppingCart,    label: 'Transactions', route: 'WebTransactions' },
     { icon: Users,           label: 'Staff',        route: 'WebCashierManagement' },
     { icon: CalendarCheck,   label: 'Kehadiran',    route: 'WebAttendanceManagement' },
+    { icon: FileText,        label: 'Laporan',      route: 'WebReports' },
     { icon: Crown,           label: 'Member',       route: 'WebMemberManagement' },
     { icon: CreditCard,      label: 'Subscription', route: 'WebSubscription' },
     { icon: Settings,        label: 'Settings',     route: 'WebSettings' },

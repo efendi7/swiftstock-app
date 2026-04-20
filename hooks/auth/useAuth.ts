@@ -149,22 +149,26 @@ export const useAuth = () => {
             const newTenantRef = doc(collection(db, 'tenants'));
             const newTenantId = newTenantRef.id;
             
-            await setDoc(newTenantRef, {
-              storeName: currentUser.displayName || currentUser.email?.split('@')[0] || "Toko Baru",
-              ownerId: currentUser.uid,
-              createdAt: serverTimestamp(),
-              status: 'active',
-              plan: 'free'
-            });
-            
+            // 1. Buat profil user baru DULU supaya rule Firestore (isAdmin) lolos
             await setDoc(userRef, {
               email: currentUser.email,
               displayName: currentUser.displayName,
               photoURL: currentUser.photoURL,
               role: 'admin',
               tenantId: newTenantId,
+              isSetupComplete: false,
               createdAt: serverTimestamp(),
               status: 'active'
+            });
+
+            // 2. Baru buat Tenant
+            await setDoc(newTenantRef, {
+              storeName: currentUser.displayName || currentUser.email?.split('@')[0] || "Toko Baru",
+              ownerId: currentUser.uid,
+              businessType: 'retail', // Fallback type sesuai Opsi 2 (Store Setup)
+              createdAt: serverTimestamp(),
+              status: 'active',
+              plan: 'free'
             });
             
             setTenantId(newTenantId);
